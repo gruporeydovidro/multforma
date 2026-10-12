@@ -4,7 +4,13 @@ import type { Orcamento } from '../api';
 import { medidas } from '../regras';
 
 /** Projetos incluídos no orçamento; remover um projeto remove também os itens dele. */
-export function ProjetosDoOrcamento({ orcamento, busy, onRemover }: { orcamento: Orcamento; busy: boolean; onRemover: (projetoId: number) => Promise<unknown> }) {
+export function ProjetosDoOrcamento({ orcamento, editavel, busy, onRemover }: {
+  orcamento: Orcamento;
+  /** Vendedor com o orçamento aberto (regras.permissoesOrcamento). */
+  editavel: boolean;
+  busy: boolean;
+  onRemover: (projetoId: number) => Promise<unknown>;
+}) {
   if (orcamento.projetos.length === 0) return null;
   return (
     <DataTable
@@ -21,7 +27,7 @@ export function ProjetosDoOrcamento({ orcamento, busy, onRemover }: { orcamento:
           header: '',
           align: 'right',
           render: (p) =>
-            orcamento.itens_editaveis && (
+            editavel && (
               <button className="btn small danger" disabled={busy} onClick={() => window.confirm('Remover o projeto e todos os itens dele?') && onRemover(p.id)}>
                 Remover
               </button>

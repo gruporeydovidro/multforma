@@ -6,15 +6,16 @@ import { medidas, medidasCalculadas } from '../regras';
 import { AmbientesDatalist, ItemEditModal, ItemRapidoForm } from './ItemForm';
 
 /** Grade de itens com inclusão rápida, edição e remoção. Valores calculados pelo servidor. */
-export function ItensGrid({ orcamento, busy, onAdicionar, onAtualizar, onRemover }: {
+export function ItensGrid({ orcamento, editavel, busy, onAdicionar, onAtualizar, onRemover }: {
   orcamento: Orcamento;
+  /** Vendedor com o orçamento aberto (regras.permissoesOrcamento). */
+  editavel: boolean;
   busy: boolean;
   onAdicionar: (it: ItemInput) => Promise<unknown>;
   onAtualizar: (itemId: number, patch: Partial<ItemInput>) => Promise<unknown>;
   onRemover: (itemId: number) => Promise<unknown>;
 }) {
   const [editando, setEditando] = useState<ItemOrcamento | null>(null);
-  const editavel = orcamento.itens_editaveis;
   const projetoNome = (id: number | null) => orcamento.projetos.find((p) => p.id === id)?.descricao ?? 'Projeto';
 
   return (

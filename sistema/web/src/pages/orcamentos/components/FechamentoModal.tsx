@@ -1,12 +1,27 @@
 import { useEffect, useState } from 'react';
 import { Alert, Input, Modal, Select } from '../../../components/ui';
-import { addDays, money, today } from '../../../lib/format';
+import { addDays, decimal, money, today } from '../../../lib/format';
+import { lerNumero } from '../../../lib/numero';
 import type { FechamentoInput, FormaPagamento, ParcelaOrcamento } from '../api';
 import { FORMAS, FORMAS_A_VISTA, gerarParcelas, parcelasConferem, somaParcelas } from '../regras';
 
+const MAX_PARCELAS = 60;
+
+/** Parcela em edição: o valor fica como texto pt-BR ('1.234,56') até confirmar. */
+type Linha = ParcelaOrcamento & { texto: string };
+
+const linhas = (ps: ParcelaOrcamento[]): Linha[] => ps.map((p) => ({ ...p, texto: decimal(p.valor, 2) }));
+
+/** Quantidade de parcelas digitada: inteiro de 1 a 60, ou null. */
+function lerQuantidade(s: string): number | null {
+  const n = lerNumero(s);
+  return n !== null && Number.isInteger(n) && n >= 1 && n <= MAX_PARCELAS ? n : null;
+}
+
 /**
  * Fechamento: forma de pagamento e geração automática de N parcelas mensais, editáveis.
- * Só permite confirmar quando as parcelas somam o total (tolerância de R$ 0,01).
+ * Mudar a forma, a quantidade ou o 1º vencimento recalcula a tabela na hora (não há mudança "pendente").
+ * Só permite confirmar quando as parcelas são válidas e somam o total (tolerância de R$ 0,01).
  */
 export function FechamentoModal({ total, open, busy, error, onFechar, onConfirmar }: {
   total: number;
@@ -19,16 +34,20 @@ export function FechamentoModal({ total, open, busy, error, onFechar, onConfirma
   const [forma, setForma] = useState<FormaPagamento>('pix');
   const [qtd, setQtd] = useState('1');
   const [primeiro, setPrimeiro] = useState(today());
-  const [parcelas, setParcelas] = useState<ParcelaOrcamento[]>([]);
+  const [parcelas, setParcelas] = useState<Linha[]>([]);
 
-  const gerar = (f = forma, n = qtd, p = primeiro) => setParcelas(gerarParcelas(total, Number(n) || 1, p, f));
+  /** Regera a tabela com os parâmetros dados; parâmetros inválidos esvaziam a tabela (e bloqueiam a confirmação). */
+  const gerar = (f: FormaPagamento, n: string, p: string) => {
+    const quantidade = lerQuantidade(n);
+    setParcelas(quantidade && p ? linhas(gerarParcelas(total, quantidade, p, f)) : []);
+  };
 
   useEffect(() => {
     if (!open) return;
     setForma('pix');
     setQtd('1');
     setPrimeiro(today());
-    setParcelas(gerarParcelas(total, 1, today(), 'pix'));
+    setParcelas(linhas(gerarParcelas(total, 1, today(), 'pix')));
   }, [open, total]);
 
   const trocarForma = (f: FormaPagamento) => {
@@ -40,15 +59,27 @@ export function FechamentoModal({ total, open, busy, error, onFechar, onConfirma
     setPrimeiro(p);
     gerar(f, n, p);
   };
+  const trocarQtd = (n: string) => {
+    setQtd(n);
+    gerar(forma, n, primeiro);
+  };
+  const trocarPrimeiro = (p: string) => {
+    setPrimeiro(p);
+    gerar(forma, qtd, p);
+  };
 
-  const editar = (i: number, patch: Partial<ParcelaOrcamento>) => setParcelas((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)));
-  const soma = somaParcelas(parcelas);
-  const confere = parcelas.length > 0 && parcelasConferem(parcelas, total);
+  const editar = (i: number, patch: Partial<Linha>) => setParcelas((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+  const valores = parcelas.map((p) => ({ ...p, valor: lerNumero(p.texto) }));
+  const valoresValidos = valores.every((p) => p.valor !== null && p.valor > 0 && !!p.vencimento);
+  const soma = somaParcelas(valores.map((p) => ({ valor: p.valor ?? 0 })));
+  const quantidadeValida = lerQuantidade(qtd) !== null;
+  const confere = quantidadeValida && parcelas.length > 0 && valoresValidos && parcelasConferem(valores.map((p) => ({ valor: p.valor ?? 0 })), total);
 
   const confirmar = () =>
+    confere &&
     onConfirmar({
       forma_pagamento: forma,
-      parcelas: parcelas.map((p) => ({ vencimento: p.vencimento, valor: Number(p.valor), forma_pagamento: p.forma_pagamento })),
+      parcelas: valores.map((p) => ({ vencimento: p.vencimento, valor: p.valor!, forma_pagamento: p.forma_pagamento })),
     });
 
   return (
@@ -72,10 +103,17 @@ export function FechamentoModal({ total, open, busy, error, onFechar, onConfirma
         <Select className="col-4" label="Forma de pagamento" value={forma} onChange={(e) => trocarForma(e.target.value as FormaPagamento)}>
           {Object.entries(FORMAS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </Select>
-        <Input className="col-2" label="Parcelas" type="number" min={1} max={60} value={qtd} onChange={(e) => setQtd(e.target.value)} />
-        <Input className="col-3" label="1º vencimento" type="date" value={primeiro} onChange={(e) => setPrimeiro(e.target.value)} />
+        <Input
+          className="col-2"
+          label="Parcelas"
+          inputMode="numeric"
+          value={qtd}
+          onChange={(e) => trocarQtd(e.target.value)}
+          error={quantidadeValida ? undefined : `De 1 a ${MAX_PARCELAS}`}
+        />
+        <Input className="col-3" label="1º vencimento" type="date" value={primeiro} onChange={(e) => trocarPrimeiro(e.target.value)} error={primeiro ? undefined : 'Informe a data'} />
         <div className="col-3" style={{ display: 'flex', alignItems: 'flex-end' }}>
-          <button className="btn block" onClick={() => gerar()}>Gerar parcelas</button>
+          <button className="btn block" onClick={() => gerar(forma, qtd, primeiro)} title="Desfaz as edições manuais das parcelas">Regerar parcelas</button>
         </div>
       </div>
       <div className="table-wrap" style={{ marginTop: 14 }}>
@@ -98,7 +136,10 @@ export function FechamentoModal({ total, open, busy, error, onFechar, onConfirma
                     {Object.entries(FORMAS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </td>
-                <td><input type="number" min={0} step="0.01" style={{ textAlign: 'right' }} value={p.valor} onChange={(e) => editar(i, { valor: Number(e.target.value) })} /></td>
+                <td>
+                  <input inputMode="decimal" style={{ textAlign: 'right' }} value={p.texto} onChange={(e) => editar(i, { texto: e.target.value })}
+                    aria-invalid={valores[i].valor === null || valores[i].valor! <= 0} />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -110,7 +151,10 @@ export function FechamentoModal({ total, open, busy, error, onFechar, onConfirma
           </tfoot>
         </table>
       </div>
-      {!confere && parcelas.length > 0 && <div className="field-error" style={{ marginTop: 8 }}>As parcelas precisam somar o total do orçamento (diferença: {money(total - soma)}).</div>}
+      {!valoresValidos && <div className="field-error" style={{ marginTop: 8 }}>Cada parcela precisa de vencimento e de um valor maior que zero (ex.: 1.234,56).</div>}
+      {valoresValidos && !confere && parcelas.length > 0 && (
+        <div className="field-error" style={{ marginTop: 8 }}>As parcelas precisam somar o total do orçamento (diferença: {money(total - soma)}).</div>
+      )}
     </Modal>
   );
 }

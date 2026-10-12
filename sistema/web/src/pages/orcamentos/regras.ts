@@ -123,16 +123,16 @@ export function adicionarMeses(iso: string, meses: number): string {
   return alvo.toISOString().slice(0, 10);
 }
 
-/** N parcelas mensais que somam exatamente o total (centavos de sobra na primeira). */
+/** N parcelas mensais que somam exatamente o total (centavos de sobra na última, como no Financeiro). */
 export function gerarParcelas(total: number, n: number, primeiroVencimento: string, forma: FormaPagamento): ParcelaOrcamento[] {
   const qtd = Math.max(1, Math.floor(n));
-  const centavos = Math.round(total * 100);
+  const centavos = Math.round(round2(total) * 100);
   const base = Math.floor(centavos / qtd);
   const resto = centavos - base * qtd;
   return Array.from({ length: qtd }, (_, i) => ({
     numero: i + 1,
     vencimento: adicionarMeses(primeiroVencimento, i),
-    valor: (base + (i === 0 ? resto : 0)) / 100,
+    valor: (base + (i === qtd - 1 ? resto : 0)) / 100,
     forma_pagamento: forma,
   }));
 }

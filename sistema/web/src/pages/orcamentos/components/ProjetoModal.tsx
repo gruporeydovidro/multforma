@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, AsyncSelect, DataTable, Input, Modal, Select } from '../../../components/ui';
 import { decimal, money } from '../../../lib/format';
+import { lerNumero } from '../../../lib/numero';
 import { apoioApi, orcamentosApi, type PreviaProjeto, type ProjetoInput } from '../api';
 import { useEnvio, useProjetosAtivos } from '../hooks';
 import { medidas } from '../regras';
@@ -16,23 +17,42 @@ export function ProjetoModal({ orcamentoId, open, busy, error, onFechar, onInclu
   onIncluir: (p: ProjetoInput) => Promise<unknown>;
 }) {
   const projetos = useProjetosAtivos();
-  const [p, setP] = useState({ projeto_id: '', ambiente: '', largura: '', altura: '', quantidade: '1', vidro: null as number | null });
+  const vazio = { projeto_id: '', ambiente: '', largura: '', altura: '', quantidade: '1', vidro: null as number | null };
+  const [p, setP] = useState(vazio);
   const [previa, setPrevia] = useState<PreviaProjeto>();
+  const [chave, setChave] = useState(0); // recria o AsyncSelect do vidro para limpar o texto
   const envio = useEnvio();
+  const { setError } = envio;
+  // Limpa ao fechar (depois de incluir ou cancelar) e ao abrir: a reabertura nunca mostra dados antigos.
+  useEffect(() => {
+    setP(vazio);
+    setPrevia(undefined);
+    setError('');
+    setChave((k) => k + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, setError]);
   const set = (k: keyof typeof p, v: string | number | null) => {
     setP((a) => ({ ...a, [k]: v }));
     setPrevia(undefined);
   };
 
+  const inteiroPositivo = (s: string) => {
+    const n = lerNumero(s);
+    return n !== null && Number.isInteger(n) && n > 0 ? n : null;
+  };
+  const largura = inteiroPositivo(p.largura);
+  const altura = inteiroPositivo(p.altura);
+  const quantidade = inteiroPositivo(p.quantidade);
   const dados = (): ProjetoInput => ({
     projeto_id: Number(p.projeto_id),
-    ambiente: p.ambiente || null,
-    largura_vao_mm: Number(p.largura),
-    altura_vao_mm: Number(p.altura),
-    quantidade: Number(p.quantidade) || 1,
+    ambiente: p.ambiente.trim() || null,
+    largura_vao_mm: largura!,
+    altura_vao_mm: altura!,
+    quantidade: quantidade!,
     vidro_produto_id: p.vidro,
   });
-  const completo = !!p.projeto_id && Number(p.largura) > 0 && Number(p.altura) > 0;
+  const completo = !!p.projeto_id && largura !== null && altura !== null && quantidade !== null;
+  const invalido = (s: string, n: number | null) => (s.trim() && n === null ? 'Número inteiro maior que zero' : undefined);
 
   const verPrevia = () => envio.run(async () => setPrevia(await orcamentosApi.previaProjeto(orcamentoId, dados())));
   const incluir = async () => {
@@ -65,10 +85,11 @@ export function ProjetoModal({ orcamentoId, open, busy, error, onFechar, onInclu
           {projetos.data?.map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
         </Select>
         <Input className="col-6" label="Ambiente" list="ambientes-orcamento" value={p.ambiente} onChange={(e) => set('ambiente', e.target.value)} />
-        <Input className="col-3" label="Largura do vão (mm)" type="number" min={1} value={p.largura} onChange={(e) => set('largura', e.target.value)} />
-        <Input className="col-3" label="Altura do vão (mm)" type="number" min={1} value={p.altura} onChange={(e) => set('altura', e.target.value)} />
-        <Input className="col-2" label="Quantidade" type="number" min={1} value={p.quantidade} onChange={(e) => set('quantidade', e.target.value)} />
-        <AsyncSelect className="col-4" label="Vidro" value={p.vidro} fetchOptions={apoioApi.buscarProdutos} onChange={(v) => set('vidro', v)} placeholder="Vidro das peças sem produto" />
+        <Input className="col-3" label="Largura do vão (mm)" inputMode="numeric" value={p.largura} onChange={(e) => set('largura', e.target.value)} error={invalido(p.largura, largura)} />
+        <Input className="col-3" label="Altura do vão (mm)" inputMode="numeric" value={p.altura} onChange={(e) => set('altura', e.target.value)} error={invalido(p.altura, altura)} />
+        <Input className="col-2" label="Quantidade" inputMode="numeric" value={p.quantidade} onChange={(e) => set('quantidade', e.target.value)}
+          error={p.quantidade.trim() ? invalido(p.quantidade, quantidade) : 'Informe a quantidade'} />
+        <AsyncSelect key={chave} className="col-4" label="Vidro" value={p.vidro} fetchOptions={apoioApi.buscarProdutos} onChange={(v) => set('vidro', v)} placeholder="Vidro das peças sem produto" />
       </div>
       {previa && (
         <div style={{ marginTop: 14 }}>

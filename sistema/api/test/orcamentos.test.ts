@@ -517,6 +517,28 @@ describe('orçamentos', () => {
       expect(conexoes.size).toBe(1);
     });
 
+    it('baixa o estoque em ordem crescente de produto, com itens do mesmo produto juntos (evita deadlock)', async () => {
+      const extra = await id(`insert into produto (codigo, nome, unidade_venda, preco_venda, controla_estoque) values ('ORD1', 'Puxador teste', 'UN', 5, true) returning id`);
+      const produtos = [extra, ids.kit, ids.vt8].sort((a, b) => b - a); // inclui do maior para o menor id
+      const saidas: number[] = [];
+      const ports: Ports = {
+        estoque: { registrarMovimento: async (_db: Db, m: MovimentoEstoqueInput) => { saidas.push(m.produto_id); return 1; }, saldo: async () => 0 },
+        financeiro: { gerarContasReceber: async (_db: Db, a: GerarContasReceberInput) => a.parcelas.map((_, i) => 1 + i), baixarContaReceber: async () => {} },
+        producao: { criarOrdemProducao: async () => null },
+        projetos: { expandir: async () => ({ id: 0, nome: '', pecas: [] }) },
+        catalogo: { atualizarCusto: async () => {} },
+      };
+      const o = await novo({ destino: 'balcao' });
+      for (const pid of [...produtos, produtos[0], produtos[1]]) {
+        await ok('POST', `/${o.id}/itens`, { produto_id: pid, quantidade: 1, largura_mm: 1000, altura_mm: 1000 });
+      }
+      const ap = await ok('POST', `/${o.id}/aprovar`);
+      const u = { id: (await queryOne<{ id: number }>(`select id from usuario where login = 'admin'`))!.id, filial_id: ids.filial };
+      await new OrcamentoService(ports).fechar(u, o.id, { forma_pagamento: 'boleto', parcelas: [{ vencimento: '2026-12-10', valor: ap.total }] });
+      const crescente = [...produtos].sort((a, b) => a - b);
+      expect(saidas).toEqual([crescente[0], crescente[1], crescente[1], crescente[2], crescente[2]]);
+    });
+
     it('falha numa porta desfaz todo o fechamento', async () => {
       const falha: Ports = {
         estoque: { registrarMovimento: async () => { throw new Error('estoque indisponível'); }, saldo: async () => 0 },

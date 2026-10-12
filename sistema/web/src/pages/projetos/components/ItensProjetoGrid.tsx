@@ -51,6 +51,7 @@ export function ItensProjetoGrid({ itens, onChange, onAdd, onRemove, onMove, dis
                     placeholder={it.tipo === 'vidro' ? 'Vidro escolhido no orçamento' : 'Buscar produto…'}
                     fetchOptions={projetosApi.buscarProdutos}
                     onChange={(v, o) => onChange(i, { produto_id: v, produto_nome: o?.label ?? null })}
+                    disabled={disabled}
                   />
                 </td>
                 <td>
