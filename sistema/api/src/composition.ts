@@ -7,8 +7,8 @@ import * as producao from './modules/producao/service.js';
 
 export function criarPorts(): Ports {
   return {
-    estoque: { registrarMovimento: estoque.registrarMovimento, saldo: estoque.saldo }, // linha do módulo Estoque
-    financeiro: { gerarContasReceber: financeiro.gerarContasReceber, baixarContaReceber: financeiro.baixarContaReceber }, // linha do módulo Financeiro
-    producao: { criarOrdemProducao: producao.criarOrdemProducao }, // linha do módulo Produção
+    estoque: new estoque.EstoqueService(estoque.repositoriosEstoque), // linha do módulo Estoque
+    financeiro: new financeiro.FinanceiroService(), // linha do módulo Financeiro
+    producao: new producao.ProducaoService(producao.repositoriosProducao), // linha do módulo Produção
   };
 }

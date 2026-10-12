@@ -1,10 +1,14 @@
 import type { ModuleDef } from '../../lib/module';
+import { ProjetoPage } from './ProjetoPage';
+import { ProjetosPage } from './ProjetosPage';
 
-// Módulo Projetos: registrar aqui o menu e as rotas (ver docs/CONVENCOES.md).
 const modulo: ModuleDef = {
   titulo: 'Projetos',
-  menu: [],
-  routes: [],
+  menu: [{ label: 'Projetos', path: 'projetos', perfis: ['vendedor'] }],
+  routes: [
+    { path: 'projetos', element: <ProjetosPage /> },
+    { path: 'projetos/:id', element: <ProjetoPage /> },
+  ],
 };
 
 export default modulo;
