@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Alert, AsyncSelect, Card, DataTable, Input, PageHeader, Pager, SearchBox, Select, type Column } from '../../components/ui';
 import { can, useAuth } from '../../lib/auth';
 import { date, money } from '../../lib/format';
-import { buscarPessoas, financeiroApi, type ContaReceber, type StatusTitulo } from './api';
+import { buscarPessoas, financeiroApi, type ContaReceber } from './api';
 import { BaixaModal } from './components/BaixaModal';
 import { ConfirmacaoModal } from './components/ConfirmacaoModal';
 import { NovaContaReceberModal } from './components/NovaContaReceberModal';
 import { SituacaoBadge } from './components/SituacaoBadge';
 import { TotaisTitulos } from './components/TotaisTitulos';
-import { useListaTitulos } from './hooks';
+import { TODAS, useListaTitulos } from './hooks';
 
 const buscarClientes = buscarPessoas('cliente');
 type Acao = { tipo: 'baixar' | 'cancelar' | 'estornar'; titulo: ContaReceber } | null;
@@ -17,8 +17,9 @@ type Acao = { tipo: 'baixar' | 'cancelar' | 'estornar'; titulo: ContaReceber } |
 export function ContasReceberPage() {
   const { user } = useAuth();
   const podeOperar = can(user, 'financeiro');
-  const lista = useListaTitulos(financeiroApi.receber.listar, { status: 'aberto' });
-  const { filtros, filtrar } = lista;
+  const location = useLocation();
+  const lista = useListaTitulos(financeiroApi.receber.listar);
+  const { filtros, filtrar, pessoa } = lista;
   const [acao, setAcao] = useState<Acao>(null);
   const [novo, setNovo] = useState(false);
   const [aviso, setAviso] = useState<string>();
@@ -38,7 +39,7 @@ export function ContasReceberPage() {
       header: '', align: 'right', render: (t) => (
         <div className="actions" style={{ justifyContent: 'flex-end' }}>
           {podeOperar && t.status === 'aberto' && <button className="btn small primary" onClick={() => setAcao({ tipo: 'baixar', titulo: t })}>Baixar</button>}
-          {t.valor_pago > 0 && <Link className="btn small" to={`/financeiro/receber/${t.id}/recibo`}>Recibo</Link>}
+          {t.valor_pago > 0 && <Link className="btn small" to={`/financeiro/receber/${t.id}/recibo`} state={{ voltar: location.search }}>Recibo</Link>}
           {podeOperar && t.valor_pago > 0 && t.status !== 'cancelado' && <button className="btn small" onClick={() => setAcao({ tipo: 'estornar', titulo: t })}>Estornar</button>}
           {podeOperar && t.status === 'aberto' && t.valor_pago === 0 && <button className="btn small danger" onClick={() => setAcao({ tipo: 'cancelar', titulo: t })}>Cancelar</button>}
         </div>
@@ -56,18 +57,18 @@ export function ContasReceberPage() {
       <TotaisTitulos totais={lista.data?.totais} rotuloPago={filtros.de || filtros.ate ? 'Recebido no período' : 'Recebido (total)'} />
       <Card>
         <div className="grid" style={{ marginBottom: 12, alignItems: 'end' }}>
-          <div className="col-3"><SearchBox value={filtros.q ?? ''} onChange={(q) => filtrar({ q })} placeholder="Cliente ou documento…" /></div>
-          <Select className="col-2" label="Situação" value={filtros.status ?? ''} onChange={(e) => filtrar({ status: e.target.value as StatusTitulo | '' })}>
-            <option value="">Todas</option>
+          <div className="col-3"><SearchBox value={filtros.q} onChange={(q) => filtrar({ q })} placeholder="Cliente ou documento…" /></div>
+          <Select className="col-2" label="Situação" value={filtros.status} onChange={(e) => filtrar({ status: e.target.value })}>
+            <option value={TODAS}>Todas</option>
             <option value="aberto">Em aberto</option>
             <option value="pago">Pagas</option>
             <option value="cancelado">Canceladas</option>
           </Select>
-          <Input className="col-2" label="Vencimento de" type="date" value={filtros.de ?? ''} onChange={(e) => filtrar({ de: e.target.value })} />
-          <Input className="col-2" label="até" type="date" value={filtros.ate ?? ''} onChange={(e) => filtrar({ ate: e.target.value })} />
-          <AsyncSelect className="col-3" label="Cliente" value={filtros.cliente_id ?? null} onChange={(v) => filtrar({ cliente_id: v })} fetchOptions={buscarClientes} placeholder="Todos" />
+          <Input className="col-2" label="Vencimento de" type="date" value={filtros.de} onChange={(e) => filtrar({ de: e.target.value })} />
+          <Input className="col-2" label="até" type="date" value={filtros.ate} onChange={(e) => filtrar({ ate: e.target.value })} />
+          <AsyncSelect className="col-3" label="Cliente" {...pessoa('cliente')} fetchOptions={buscarClientes} placeholder="Todos" />
           <label className="col-3" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input type="checkbox" checked={!!filtros.vencidas} onChange={(e) => filtrar({ vencidas: e.target.checked })} /> Somente vencidas
+            <input type="checkbox" checked={filtros.vencidas === '1'} onChange={(e) => filtrar({ vencidas: e.target.checked ? '1' : '' })} /> Somente vencidas
           </label>
         </div>
         <Alert>{lista.error}</Alert>

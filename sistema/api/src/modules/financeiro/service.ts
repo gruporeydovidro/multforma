@@ -35,11 +35,15 @@ export class FinanceiroService implements FinanceiroPort {
     });
   }
 
-  /** Baixa (total ou parcial) de um título a receber, com a entrada no caixa. */
+  /**
+   * Baixa (total ou parcial) de um título a receber, com a entrada no caixa.
+   * A porta não recebe a filial: o título deve existir (404) e estar em aberto (409); o caixa usa a filial do título.
+   * As rotas do financeiro não passam por aqui: usam MovimentacaoTitulos.baixar com a filial do usuário.
+   */
   async baixarContaReceber(db: Db, args: BaixaContaReceberInput): Promise<void> {
     const { receber, caixa } = this.fabrica(db);
     await traduzirErros(() =>
-      new MovimentacaoTitulos(receber, caixa, SENTIDO_RECEBER).baixar(args.id, undefined, {
+      new MovimentacaoTitulos(receber, caixa, SENTIDO_RECEBER).baixarPelaPorta(args.id, {
         valor: args.valor,
         data: args.data,
         forma_pagamento: args.forma_pagamento,

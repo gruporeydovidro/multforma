@@ -23,7 +23,9 @@ export function situacaoTitulo(t: { status: StatusTitulo; vencida: boolean; valo
   return { label: t.valor_pago > 0 ? 'Parcial' : 'Aberto', tone: t.valor_pago > 0 ? 'orange' : 'blue' };
 }
 
-export const round2 = (v: number) => (Math.sign(v) * Math.round(Math.abs(v) * 100 * (1 + 2 * Number.EPSILON))) / 100 || 0;
+/** Valor em centavos inteiros (meio para longe do zero; toPrecision remove o ruído binário, como em api/src/shared/numeros.ts). */
+const centavos = (v: number) => Math.sign(v) * Math.round(Number((Math.abs(v) * 100).toPrecision(15)));
+const round2 = (v: number) => centavos(v) / 100 || 0;
 
 /** Soma meses ajustando ao último dia do mês (igual à regra da API). */
 export function somarMeses(iso: string, meses: number): string {
@@ -36,24 +38,21 @@ export function somarMeses(iso: string, meses: number): string {
   return `${p(ano, 4)}-${p(mes)}-${p(Math.min(d, ultimo))}`;
 }
 
-/** Prévia das parcelas mensais (a sobra do arredondamento fica na última). */
-export function previaParcelas(total: number, quantidade: number, primeiroVencimento: string) {
-  if (!(total > 0) || !(quantidade >= 1) || !/^\d{4}-\d{2}-\d{2}$/.test(primeiroVencimento)) return [];
-  const t = round2(total);
-  const base = Math.floor((t / quantidade) * 100 + 1e-6) / 100;
+/**
+ * Prévia das parcelas mensais, com a mesma regra da API (GeradorParcelas): valores iguais truncados ao centavo
+ * e a sobra do arredondamento na ÚLTIMA parcela.
+ */
+export function previaParcelas(total: number | null, quantidade: number, primeiroVencimento: string) {
+  if (total === null || !(total > 0) || !(quantidade >= 1) || !/^\d{4}-\d{2}-\d{2}$/.test(primeiroVencimento)) return [];
+  const c = centavos(total);
+  if (c < quantidade) return [];
+  const base = Math.floor(c / quantidade);
+  const sobra = c - base * quantidade;
   return Array.from({ length: quantidade }, (_, i) => ({
     numero: i + 1,
     vencimento: somarMeses(primeiroVencimento, i),
-    valor: i === quantidade - 1 ? round2(t - base * (quantidade - 1)) : base,
+    valor: (base + (i === quantidade - 1 ? sobra : 0)) / 100,
   }));
-}
-
-/** Converte texto digitado ('1.234,56' ou '1234.56') em número; NaN se inválido. */
-export function lerValor(texto: string): number {
-  const s = texto.trim();
-  if (!s) return NaN;
-  const normal = s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s;
-  return /^-?\d+(\.\d+)?$/.test(normal) ? Number(normal) : NaN;
 }
 
 /** Valor por extenso simplificado para o recibo, ex.: 'cento e vinte reais e cinquenta centavos'. */

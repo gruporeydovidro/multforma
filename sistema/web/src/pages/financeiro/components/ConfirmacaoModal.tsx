@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Alert, Input, Modal } from '../../../components/ui';
-import { useAcao } from '../hooks';
+import { useEnvio } from '../../../lib/useEnvio';
 
 /** Confirmação de ação (cancelar, estornar, excluir), com motivo opcional. */
 export function ConfirmacaoModal({ titulo, mensagem, aberto, comMotivo, rotulo = 'Confirmar', perigo, onFechar, onConfirmar }: {
@@ -14,9 +14,9 @@ export function ConfirmacaoModal({ titulo, mensagem, aberto, comMotivo, rotulo =
   onConfirmar: (motivo?: string) => Promise<unknown>;
 }) {
   const [motivo, setMotivo] = useState('');
-  const { enviando, erro, setErro, executar } = useAcao();
+  const { busy: enviando, error: erro, setError: setErro, run: executar } = useEnvio();
   useEffect(() => {
-    if (aberto) { setMotivo(''); setErro(undefined); }
+    if (aberto) { setMotivo(''); setErro(''); }
   }, [aberto, setErro]);
   const confirmar = async () => {
     const ok = await executar(async () => { await onConfirmar(motivo.trim() || undefined); return true; });
@@ -26,7 +26,7 @@ export function ConfirmacaoModal({ titulo, mensagem, aberto, comMotivo, rotulo =
     <Modal
       title={titulo}
       open={aberto}
-      onClose={onFechar}
+      onClose={enviando ? () => undefined : onFechar}
       footer={
         <>
           <button className="btn" onClick={onFechar} disabled={enviando}>Voltar</button>

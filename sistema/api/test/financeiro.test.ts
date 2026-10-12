@@ -326,15 +326,82 @@ describe('financeiro', () => {
   });
 
   describe('multi-filial', () => {
-    it('não enxerga nem altera títulos de outra filial', async () => {
-      const filial2 = (await queryOne<{ id: number }>(`insert into filial (nome) values ('Filial 2') returning id`))!.id;
-      const outro = (await queryOne<{ id: number }>(
-        `insert into conta_receber (filial_id, cliente_id, vencimento, valor) values ($1, $2, current_date, 10) returning id`,
-        [filial2, clienteId],
+    let filial2: number;
+    const titulo2 = async (tabela: 'conta_receber' | 'conta_pagar', valorPago = 0) => {
+      const cols = tabela === 'conta_receber' ? 'cliente_id' : 'descricao';
+      const v = tabela === 'conta_receber' ? clienteId : 'Despesa da filial 2';
+      return (await queryOne<{ id: number }>(
+        `insert into ${tabela} (filial_id, ${cols}, vencimento, valor, valor_pago) values ($1, $2, current_date, 10, $3) returning id`,
+        [filial2, v, valorPago],
       ))!.id;
+    };
+    const estado = (tabela: string, id: number) => queryOne(`select status, valor_pago, observacao from ${tabela} where id = $1`, [id]);
+    const movimentos = (fk: string, id: number) => queryOne<{ n: number }>(`select count(*)::int as n from caixa_lancamento where ${fk} = $1`, [id]);
+
+    beforeAll(async () => {
+      filial2 = (await queryOne<{ id: number }>(`insert into filial (nome) values ('Filial 2') returning id`))!.id;
+    });
+
+    it('não enxerga nem altera títulos de outra filial', async () => {
+      const outro = await titulo2('conta_receber');
       expect((await req('GET', `/receber/${outro}`)).statusCode).toBe(404);
       expect((await req('POST', `/receber/${outro}/baixar`, {})).statusCode).toBe(404);
       expect((await req('GET', '/receber?pageSize=200')).json().items.some((i: any) => i.id === outro)).toBe(false);
+    });
+
+    it('regressão: baixa, estorno e cancelamento a receber de outra filial dão 404 e nada muda', async () => {
+      const aberto = await titulo2('conta_receber');
+      const pago = await titulo2('conta_receber', 4);
+      expect((await req('POST', `/receber/${aberto}/baixar`, { valor: 5 })).statusCode).toBe(404);
+      expect((await req('POST', `/receber/${aberto}/cancelar`, { motivo: 'x' })).statusCode).toBe(404);
+      expect((await req('POST', `/receber/${pago}/estornar`)).statusCode).toBe(404);
+      expect(await estado('conta_receber', aberto)).toEqual({ status: 'aberto', valor_pago: 0, observacao: null });
+      expect(await estado('conta_receber', pago)).toEqual({ status: 'aberto', valor_pago: 4, observacao: null });
+      expect((await movimentos('conta_receber_id', aberto))!.n + (await movimentos('conta_receber_id', pago))!.n).toBe(0);
+    });
+
+    it('regressão: operações a pagar de outra filial dão 404 e nada muda', async () => {
+      const aberto = await titulo2('conta_pagar');
+      const pago = await titulo2('conta_pagar', 4);
+      expect((await req('GET', `/pagar/${aberto}`)).statusCode).toBe(404);
+      expect((await req('POST', `/pagar/${aberto}/baixar`, {})).statusCode).toBe(404);
+      expect((await req('POST', `/pagar/${aberto}/cancelar`, {})).statusCode).toBe(404);
+      expect((await req('POST', `/pagar/${pago}/estornar`)).statusCode).toBe(404);
+      expect((await req('PUT', `/pagar/${aberto}`, { descricao: 'Invasão', vencimento: hoje, valor: 99 })).statusCode).toBe(404);
+      expect((await req('POST', `/pagar/${aberto}/copiar`, {})).statusCode).toBe(404);
+      expect((await req('DELETE', `/pagar/${aberto}`)).statusCode).toBe(404);
+      expect(await queryOne('select status, valor_pago, valor, descricao from conta_pagar where id = $1', [aberto]))
+        .toEqual({ status: 'aberto', valor_pago: 0, valor: 10, descricao: 'Despesa da filial 2' });
+      expect(await estado('conta_pagar', pago)).toMatchObject({ status: 'aberto', valor_pago: 4 });
+      expect((await movimentos('conta_pagar_id', aberto))!.n + (await movimentos('conta_pagar_id', pago))!.n).toBe(0);
+      const alerta = (await req('GET', '/pagar/alerta?dias=30')).json();
+      expect([...alerta.vencidas, ...alerta.a_vencer].some((i: any) => i.id === aberto)).toBe(false);
+    });
+
+    it('regressão: caixa de outra filial não aparece nem pode ser excluído', async () => {
+      const lanc = (await queryOne<{ id: number }>(
+        `insert into caixa_lancamento (filial_id, data, tipo, valor, descricao) values ($1, current_date, 'entrada', 7, 'Filial 2') returning id`,
+        [filial2],
+      ))!.id;
+      expect((await req('GET', '/caixa')).json().lancamentos.some((l: any) => l.id === lanc)).toBe(false);
+      expect((await req('DELETE', `/caixa/${lanc}`)).statusCode).toBe(404);
+      expect(await queryOne('select count(*)::int as n from caixa_lancamento where id = $1', [lanc])).toEqual({ n: 1 });
+    });
+
+    it('regressão: a porta exige título existente e em aberto, e lança o caixa na filial do título', async () => {
+      const svc = new FinanceiroService();
+      const baixa = (id: number) => withTx((db) => svc.baixarContaReceber(db, { id, valor: 10, data: hoje, forma_pagamento: 'pix', usuario_id: null }));
+      await expect(baixa(999999)).rejects.toMatchObject({ status: 404 });
+
+      const cancelado = await titulo2('conta_receber');
+      await query(`update conta_receber set status = 'cancelado' where id = $1`, [cancelado]);
+      await expect(baixa(cancelado)).rejects.toMatchObject({ status: 409 });
+      expect((await movimentos('conta_receber_id', cancelado))!.n).toBe(0);
+
+      const aberto = await titulo2('conta_receber');
+      await baixa(aberto);
+      expect(await queryOne('select filial_id, tipo, valor from caixa_lancamento where conta_receber_id = $1', [aberto]))
+        .toEqual({ filial_id: filial2, tipo: 'entrada', valor: 10 });
     });
   });
 });

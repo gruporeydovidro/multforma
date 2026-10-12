@@ -32,7 +32,17 @@ export interface LinhaVenda extends AgregadoVenda {
   margem_pct: number;
 }
 
-/** Margem estimada = Σ (total do item − custo do produto × medida_cobrada). */
+/**
+ * A margem dos relatórios é uma ESTIMATIVA: o orçamento não grava o custo do item, então o cálculo usa o
+ * custo ATUAL do cadastro do produto (`produto.custo`), e não o custo vigente na data da venda. Se o custo
+ * do produto mudar, a margem de vendas passadas muda junto. A resposta dos relatórios traz esta nota.
+ */
+export const MARGEM_ESTIMADA = {
+  base_custo: 'custo_atual_produto',
+  nota: 'Margem estimada: total do item − custo ATUAL do produto × medida cobrada. Não usa o custo da data da venda; mudanças no custo do produto alteram a margem de vendas passadas.',
+} as const;
+
+/** Margem estimada = Σ (total do item − custo atual do produto × medida_cobrada). Ver MARGEM_ESTIMADA. */
 export function comMargem(a: AgregadoVenda): LinhaVenda {
   const margem = round2(a.total_itens - a.custo);
   return { ...a, total: round2(a.total), total_itens: round2(a.total_itens), custo: round2(a.custo), margem, margem_pct: percentual(margem, a.total_itens) };

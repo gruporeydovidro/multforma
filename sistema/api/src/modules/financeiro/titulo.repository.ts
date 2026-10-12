@@ -54,6 +54,9 @@ export interface ContaPagarView extends TituloView {
   fornecedor_nome: string | null;
 }
 
+/** Dados mínimos do título lido com bloqueio (for update). */
+export type TituloTravado = DadosTitulo & { filial_id: number };
+
 export interface PagamentoView {
   id: number;
   data: string;
@@ -79,7 +82,8 @@ interface ConfigTitulo {
   descricao: string;
 }
 
-const CALCULADOS = `round(t.valor - t.valor_pago, 2) as saldo,
+// valor e valor_pago são numeric(14,2): a diferença já é exata em 2 casas (sem arredondamento próprio).
+const CALCULADOS = `t.valor - t.valor_pago as saldo,
   (t.status = 'aberto' and t.vencimento < current_date) as vencida,
   case when t.status = 'aberto' and t.vencimento < current_date then current_date - t.vencimento else 0 end as dias_atraso`;
 
@@ -168,12 +172,24 @@ export abstract class TituloRepository<V extends TituloView = TituloView> {
     );
   }
 
-  /** Lê e bloqueia o título para alteração. Com filialId, só encontra títulos daquela filial. */
-  travar(id: number, filialId?: number): Promise<(DadosTitulo & { filial_id: number }) | undefined> {
+  /** Lê e bloqueia o título da filial para alteração (uso das rotas do financeiro: sempre com a filial do usuário). */
+  travar(id: number, filialId: number): Promise<TituloTravado | undefined> {
+    return this.travarOnde('id = $1 and filial_id = $2', [id, filialId]);
+  }
+
+  /**
+   * Lê e bloqueia o título sem filtrar a filial. Só para a porta FinanceiroPort, que recebe o id de um título
+   * gerado na própria transação de quem chama (ex.: fechamento de orçamento) e não conhece a filial do usuário.
+   */
+  travarPelaPorta(id: number): Promise<TituloTravado | undefined> {
+    return this.travarOnde('id = $1', [id]);
+  }
+
+  private travarOnde(where: string, params: unknown[]): Promise<TituloTravado | undefined> {
     return queryOne(
       `select id, filial_id, valor, valor_pago, status, vencimento, parcela, documento, ${this.cfg.descricao} as descricao
-         from ${this.cfg.tabela} where id = $1 and ($2::int is null or filial_id = $2) for update`,
-      [id, filialId ?? null],
+         from ${this.cfg.tabela} where ${where} for update`,
+      params,
       this.db,
     );
   }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useFiltroUrl } from '../../lib/useFiltroUrl';
 import { Alert, Badge, Card, DataTable, PageHeader, type Column } from '../../components/ui';
 import { date, money, today } from '../../lib/format';
 import { useAsync } from '../../lib/useAsync';
@@ -6,7 +7,6 @@ import { AcoesRelatorio } from '../../components/AcoesRelatorio';
 import { Indicador, Indicadores } from '../../components/Indicador';
 import { PeriodoFiltro } from '../../components/PeriodoFiltro';
 import { baixarCsv, gerarCsv, numeroCsv } from '../../lib/csv';
-import type { Periodo } from '../../lib/periodo';
 import { financeiroApi, type Caixa, type LancamentoCaixa } from './api';
 import { ConfirmacaoModal } from './components/ConfirmacaoModal';
 import { LancamentoCaixaModal } from './components/LancamentoCaixaModal';
@@ -36,7 +36,8 @@ function exportar(c: Caixa) {
 }
 
 export function CaixaPage() {
-  const [periodo, setPeriodo] = useState<Periodo>({ de: today(), ate: today() });
+  // Período na URL (?de=&ate=), com o dia de hoje como padrão: sobrevive à saída e à volta da tela.
+  const { filtros: periodo, definir: setPeriodo } = useFiltroUrl({ de: today(), ate: today() });
   const { data, error, reload } = useAsync(() => financeiroApi.caixa.consultar(periodo.de, periodo.ate), [periodo.de, periodo.ate]);
   const [novo, setNovo] = useState(false);
   const [excluir, setExcluir] = useState<LancamentoCaixa | null>(null);

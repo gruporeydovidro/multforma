@@ -58,10 +58,7 @@ describe('Titulo', () => {
     expect(() => titulo({ status: 'cancelado' }).estornar()).toThrow(/cancelado/);
   });
 
-  it('vencimento, edição de valor, exclusão e descrição do movimento', () => {
-    expect(titulo().estaVencido('2026-01-11')).toBe(true);
-    expect(titulo().estaVencido('2026-01-10')).toBe(false);
-    expect(titulo({ status: 'pago' }).estaVencido('2027-01-01')).toBe(false);
+  it('edição de valor, exclusão e descrição do movimento', () => {
     const t = titulo({ valor_pago: 40 });
     expect(() => t.alterarValor(40)).toThrow(/maior que o já pago/);
     t.alterarValor(150.555);
@@ -78,6 +75,25 @@ describe('GeradorParcelas', () => {
     expect(p.map((x) => x.valor)).toEqual([33.33, 33.33, 33.34]);
     expect(Dinheiro.somar(p.map((x) => x.valor))).toBe(100);
     expect(p.map((x) => x.numero)).toEqual([1, 2, 3]);
+  });
+
+  it('regressão: a sobra de centavos vai sempre na última parcela e a soma é exata', () => {
+    const casos: [number, number, number[]][] = [
+      [10, 3, [3.33, 3.33, 3.34]],
+      [0.05, 3, [0.01, 0.01, 0.03]],
+      [100.01, 2, [50, 50.01]],
+      [1000, 6, [166.66, 166.66, 166.66, 166.66, 166.66, 166.7]],
+      [0.3, 3, [0.1, 0.1, 0.1]], // 0.3 / 3 em ponto flutuante = 0.09999…; em centavos inteiros = 10
+      [1.15, 1, [1.15]],
+    ];
+    for (const [total, n, esperado] of casos) {
+      const valores = GeradorParcelas.mensais(total, n, '2026-01-01').map((x) => x.valor);
+      expect(valores, `${total} em ${n}`).toEqual(esperado);
+      expect(Dinheiro.somar(valores)).toBe(total);
+      expect(valores.slice(0, -1).every((v) => v === valores[0])).toBe(true);
+    }
+    // Arredonda o total a 2 casas antes de dividir (1,005 -> 1,01), pelo núcleo compartilhado.
+    expect(GeradorParcelas.mensais(1.005, 2, '2026-01-01').map((x) => x.valor)).toEqual([0.5, 0.51]);
   });
 
   it('vencimentos mensais ajustam ao fim do mês', () => {

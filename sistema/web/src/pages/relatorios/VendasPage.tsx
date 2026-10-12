@@ -87,7 +87,7 @@ export function VendasPage() {
             </tr>
           )} />
         <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>
-          Margem estimada = total do item − custo atual do produto × medida cobrada. {ehProduto ? '' : 'O total inclui descontos, acréscimos e frete do orçamento.'}
+          {data?.margem_estimada?.nota ?? 'Margem estimada = total do item − custo atual do produto × medida cobrada.'} {ehProduto ? '' : 'O total inclui descontos, acréscimos e frete do orçamento.'}
         </p>
       </Card>
     </>

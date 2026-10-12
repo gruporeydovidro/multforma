@@ -49,10 +49,6 @@ export class Titulo {
     return this._status === 'cancelado' ? 0 : Dinheiro.subtrair(this._valor, this._valorPago);
   }
 
-  estaVencido(hoje: string): boolean {
-    return this._status === 'aberto' && this.vencimento < hoje;
-  }
-
   /** Baixa parcial ou total. Sem valor, baixa o saldo inteiro. */
   baixar(valor?: number): Baixa {
     if (this._status !== 'aberto') throw RegraFinanceiraError.conflito('Título não está em aberto');

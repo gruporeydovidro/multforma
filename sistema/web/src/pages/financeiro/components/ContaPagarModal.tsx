@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Alert, AsyncSelect, Field, Input, Modal, Select, TextArea } from '../../../components/ui';
 import { decimal, today } from '../../../lib/format';
 import { buscarPessoas, financeiroApi, type ContaPagar, type FormaPagamento } from '../api';
-import { FORMAS_PAGAMENTO, lerValor } from '../format';
-import { useAcao } from '../hooks';
+import { FORMAS_PAGAMENTO } from '../format';
+import { lerNumero } from '../../../lib/numero';
+import { useEnvio } from '../../../lib/useEnvio';
 import { PreviaParcelas } from './PreviaParcelas';
 
 const buscarFornecedores = buscarPessoas('fornecedor');
@@ -27,12 +28,12 @@ const vazio = (): Form => ({ fornecedor_id: null, descricao: '', categoria: '', 
 /** Formulário de conta a pagar: criação (com parcelas) ou edição de um título em aberto. */
 export function ContaPagarModal({ aberto, titulo, onFechar, onSalvo }: { aberto: boolean; titulo?: ContaPagar | null; onFechar: () => void; onSalvo: () => void }) {
   const [f, setF] = useState<Form>(vazio);
-  const { enviando, erro, setErro, executar } = useAcao();
+  const { busy: enviando, error: erro, setError: setErro, run: executar } = useEnvio();
   const editando = !!titulo;
 
   useEffect(() => {
     if (!aberto) return;
-    setErro(undefined);
+    setErro('');
     setF(titulo ? {
       fornecedor_id: titulo.fornecedor_id, descricao: titulo.descricao, categoria: titulo.categoria ?? '', documento: titulo.documento ?? '',
       valor: decimal(titulo.valor), parcelas: 1, vencimento: titulo.vencimento, forma: titulo.forma_pagamento ?? '', observacao: titulo.observacao ?? '',
@@ -40,10 +41,11 @@ export function ContaPagarModal({ aberto, titulo, onFechar, onSalvo }: { aberto:
   }, [aberto, titulo, setErro]);
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((atual) => ({ ...atual, [k]: v }));
-  const total = lerValor(f.valor);
+  const total = lerNumero(f.valor) ?? 0;
   const valido = f.descricao.trim() !== '' && total > 0 && !!f.vencimento;
 
   const salvar = async () => {
+    if (!valido) return;
     const dados = {
       fornecedor_id: f.fornecedor_id, descricao: f.descricao.trim(), categoria: f.categoria.trim() || null, documento: f.documento.trim() || null,
       observacao: f.observacao.trim() || null, forma_pagamento: f.forma || null,
@@ -55,7 +57,7 @@ export function ContaPagarModal({ aberto, titulo, onFechar, onSalvo }: { aberto:
   };
 
   return (
-    <Modal title={editando ? 'Editar conta a pagar' : 'Nova conta a pagar'} open={aberto} onClose={onFechar} wide
+    <Modal title={editando ? 'Editar conta a pagar' : 'Nova conta a pagar'} open={aberto} onClose={enviando ? () => undefined : onFechar} wide
       footer={<>
         <button className="btn" onClick={onFechar} disabled={enviando}>Cancelar</button>
         <button className="btn primary" onClick={salvar} disabled={enviando || !valido}>{enviando ? 'Gravando…' : 'Gravar'}</button>

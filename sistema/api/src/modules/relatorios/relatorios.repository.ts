@@ -9,7 +9,12 @@ export interface Contagem {
   total: number;
 }
 
-/** CTEs: orçamentos fechados no período (por fechado_em) e seus itens com o custo estimado. */
+/**
+ * CTEs: orçamentos fechados no período (por fechado_em) e seus itens com o custo estimado.
+ * - Dia da venda: `fechado_em::date` converte o timestamptz no fuso da SESSÃO, que o pool fixa em
+ *   America/Sao_Paulo (lib/db.ts, TZ_EMPRESA). Uma venda às 23h30 de Brasília conta no próprio dia.
+ * - Custo: `produto.custo` ATUAL (o item não grava custo), por isso a margem é estimada (MARGEM_ESTIMADA).
+ */
 const BASE_VENDAS = `
   with orc as (
     select o.id, o.total, o.cliente_id, o.vendedor_id, o.fechado_em::date as dia

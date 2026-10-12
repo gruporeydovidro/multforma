@@ -1,3 +1,4 @@
+import { arredondar } from '../../../shared/numeros.js';
 import { Dinheiro } from './dinheiro.js';
 import { RegraFinanceiraError } from './erros.js';
 
@@ -7,7 +8,14 @@ export interface ParcelaGerada {
   valor: number;
 }
 
-/** Divide um total em parcelas mensais de 2 casas; a diferença de arredondamento fica na última. */
+/**
+ * Divide um total em parcelas mensais de 2 casas.
+ *
+ * Política de centavos (a mesma do fechamento de orçamento, `PlanoParcelas.ajustadoAo`): as parcelas
+ * têm o mesmo valor, truncado ao centavo, e a sobra do arredondamento vai na ÚLTIMA parcela,
+ * de modo que a soma seja exatamente o total. Ex.: 100 em 3 = 33,33 + 33,33 + 33,34.
+ * A conta é feita em centavos inteiros (sem ponto flutuante); o arredondamento usa `shared/numeros.ts`.
+ */
 export class GeradorParcelas {
   static readonly MAXIMO = 120;
 
@@ -17,13 +25,14 @@ export class GeradorParcelas {
     if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > GeradorParcelas.MAXIMO) {
       throw RegraFinanceiraError.invalido(`Número de parcelas deve estar entre 1 e ${GeradorParcelas.MAXIMO}`);
     }
-    const t = Dinheiro.arredondar(total);
-    if (t < quantidade * 0.01) throw RegraFinanceiraError.invalido('Valor total insuficiente para o número de parcelas');
-    const base = Math.floor((t / quantidade) * 100 + 1e-6) / 100;
+    const centavos = arredondar(Dinheiro.arredondar(total) * 100, 0);
+    if (centavos < quantidade) throw RegraFinanceiraError.invalido('Valor total insuficiente para o número de parcelas');
+    const base = Math.floor(centavos / quantidade); // divisão inteira de centavos
+    const sobra = centavos - base * quantidade;
     return Array.from({ length: quantidade }, (_, i) => ({
       numero: i + 1,
       vencimento: GeradorParcelas.somarMeses(primeiroVencimento, i),
-      valor: i === quantidade - 1 ? Dinheiro.arredondar(t - base * (quantidade - 1)) : base,
+      valor: Dinheiro.arredondar((base + (i === quantidade - 1 ? sobra : 0)) / 100),
     }));
   }
 

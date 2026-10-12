@@ -1,21 +1,21 @@
 import { useState } from 'react';
 import { Alert, AsyncSelect, Card, DataTable, Input, PageHeader, Pager, SearchBox, Select, type Column } from '../../components/ui';
 import { date, money } from '../../lib/format';
-import { buscarPessoas, financeiroApi, type ContaPagar, type StatusTitulo } from './api';
+import { buscarPessoas, financeiroApi, type ContaPagar } from './api';
 import { AlertaVencimentos } from './components/AlertaVencimentos';
 import { BaixaModal } from './components/BaixaModal';
 import { ConfirmacaoModal } from './components/ConfirmacaoModal';
 import { ContaPagarModal } from './components/ContaPagarModal';
 import { SituacaoBadge } from './components/SituacaoBadge';
 import { TotaisTitulos } from './components/TotaisTitulos';
-import { useListaTitulos } from './hooks';
+import { TODAS, useListaTitulos } from './hooks';
 
 const buscarFornecedores = buscarPessoas('fornecedor');
 type Acao = { tipo: 'baixar' | 'cancelar' | 'estornar' | 'excluir' | 'copiar'; titulo: ContaPagar } | null;
 
 export function ContasPagarPage() {
-  const lista = useListaTitulos(financeiroApi.pagar.listar, { status: 'aberto' });
-  const { filtros, filtrar } = lista;
+  const lista = useListaTitulos(financeiroApi.pagar.listar);
+  const { filtros, filtrar, pessoa } = lista;
   const [acao, setAcao] = useState<Acao>(null);
   const [form, setForm] = useState<{ titulo: ContaPagar | null } | null>(null);
   const [aviso, setAviso] = useState<string>();
@@ -56,19 +56,19 @@ export function ContasPagarPage() {
       <TotaisTitulos totais={lista.data?.totais} rotuloPago={filtros.de || filtros.ate ? 'Pago no período' : 'Pago (total)'} />
       <Card>
         <div className="grid" style={{ marginBottom: 12, alignItems: 'end' }}>
-          <div className="col-3"><SearchBox value={filtros.q ?? ''} onChange={(q) => filtrar({ q })} placeholder="Descrição, documento…" /></div>
-          <Select className="col-2" label="Situação" value={filtros.status ?? ''} onChange={(e) => filtrar({ status: e.target.value as StatusTitulo | '' })}>
-            <option value="">Todas</option>
+          <div className="col-3"><SearchBox value={filtros.q} onChange={(q) => filtrar({ q })} placeholder="Descrição, documento…" /></div>
+          <Select className="col-2" label="Situação" value={filtros.status} onChange={(e) => filtrar({ status: e.target.value })}>
+            <option value={TODAS}>Todas</option>
             <option value="aberto">Em aberto</option>
             <option value="pago">Pagas</option>
             <option value="cancelado">Canceladas</option>
           </Select>
-          <Input className="col-2" label="Vencimento de" type="date" value={filtros.de ?? ''} onChange={(e) => filtrar({ de: e.target.value })} />
-          <Input className="col-2" label="até" type="date" value={filtros.ate ?? ''} onChange={(e) => filtrar({ ate: e.target.value })} />
-          <AsyncSelect className="col-3" label="Fornecedor" value={filtros.fornecedor_id ?? null} onChange={(v) => filtrar({ fornecedor_id: v })} fetchOptions={buscarFornecedores} placeholder="Todos" />
-          <Input className="col-3" label="Categoria" value={filtros.categoria ?? ''} onChange={(e) => filtrar({ categoria: e.target.value })} />
+          <Input className="col-2" label="Vencimento de" type="date" value={filtros.de} onChange={(e) => filtrar({ de: e.target.value })} />
+          <Input className="col-2" label="até" type="date" value={filtros.ate} onChange={(e) => filtrar({ ate: e.target.value })} />
+          <AsyncSelect className="col-3" label="Fornecedor" {...pessoa('fornecedor')} fetchOptions={buscarFornecedores} placeholder="Todos" />
+          <Input className="col-3" label="Categoria" value={filtros.categoria} onChange={(e) => filtrar({ categoria: e.target.value })} />
           <label className="col-3" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input type="checkbox" checked={!!filtros.vencidas} onChange={(e) => filtrar({ vencidas: e.target.checked })} /> Somente vencidas
+            <input type="checkbox" checked={filtros.vencidas === '1'} onChange={(e) => filtrar({ vencidas: e.target.checked ? '1' : '' })} /> Somente vencidas
           </label>
         </div>
         <Alert>{lista.error}</Alert>

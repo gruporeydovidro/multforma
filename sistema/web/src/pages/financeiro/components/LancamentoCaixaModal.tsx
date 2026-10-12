@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Alert, Input, Modal, Select } from '../../../components/ui';
 import { today } from '../../../lib/format';
 import { financeiroApi, type FormaPagamento, type TipoLancamento } from '../api';
-import { FORMAS_PAGAMENTO, lerValor } from '../format';
-import { useAcao } from '../hooks';
+import { FORMAS_PAGAMENTO } from '../format';
+import { lerNumero } from '../../../lib/numero';
+import { useEnvio } from '../../../lib/useEnvio';
 
 /** Naturezas de lançamento manual e o sentido no caixa. */
 export const NATUREZAS: { value: string; label: string; tipo: TipoLancamento }[] = [
@@ -23,24 +24,25 @@ export function LancamentoCaixaModal({ aberto, onFechar, onSalvo }: { aberto: bo
   const [descricao, setDescricao] = useState('');
   const [data, setData] = useState(today());
   const [forma, setForma] = useState<FormaPagamento>('dinheiro');
-  const { enviando, erro, setErro, executar } = useAcao();
+  const { busy: enviando, error: erro, setError: setErro, run: executar } = useEnvio();
 
   useEffect(() => {
-    if (aberto) { setNatureza('despesa'); setValor(''); setDescricao(''); setData(today()); setForma('dinheiro'); setErro(undefined); }
+    if (aberto) { setNatureza('despesa'); setValor(''); setDescricao(''); setData(today()); setForma('dinheiro'); setErro(''); }
   }, [aberto, setErro]);
 
   const n = NATUREZAS.find((x) => x.value === natureza)!;
-  const v = lerValor(valor);
+  const v = lerNumero(valor) ?? 0;
   const texto = [prefixo[natureza], descricao.trim()].filter(Boolean).join(': ');
   const valido = v > 0 && texto !== '';
 
   const salvar = async () => {
+    if (!valido) return;
     const r = await executar(() => financeiroApi.caixa.lancar({ tipo: n.tipo, valor: v, descricao: texto, data, forma_pagamento: forma }));
     if (r) { onSalvo(); onFechar(); }
   };
 
   return (
-    <Modal title="Lançamento manual no caixa" open={aberto} onClose={onFechar}
+    <Modal title="Lançamento manual no caixa" open={aberto} onClose={enviando ? () => undefined : onFechar}
       footer={<>
         <button className="btn" onClick={onFechar} disabled={enviando}>Cancelar</button>
         <button className="btn primary" onClick={salvar} disabled={enviando || !valido}>{enviando ? 'Gravando…' : 'Lançar'}</button>

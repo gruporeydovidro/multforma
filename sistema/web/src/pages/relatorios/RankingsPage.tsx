@@ -83,6 +83,7 @@ export function RankingsPage() {
               <td colSpan={2} />
             </tr>
           )} />
+        {data?.margem_estimada && <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>{data.margem_estimada.nota}</p>}
       </Card>
     </>
   );

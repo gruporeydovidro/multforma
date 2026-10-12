@@ -1,6 +1,6 @@
 import { getPool, type Db } from '../../lib/db.js';
 import { badRequest } from '../../lib/http.js';
-import { Ranking, RelatorioVendas, round2, ticketMedio } from './domain/indicadores.js';
+import { MARGEM_ESTIMADA, Ranking, RelatorioVendas, round2, ticketMedio } from './domain/indicadores.js';
 import { Periodo, PeriodoInvalidoError } from './domain/periodo.js';
 import type { PeriodoInput, TipoRanking } from './relatorios.schemas.js';
 import { RelatoriosRepository, type Agrupamento, type Contagem } from './relatorios.repository.js';
@@ -30,14 +30,14 @@ export class RelatoriosService {
     const repo = this.repo;
     const p = await this.periodo(repo, entrada);
     const rel = new RelatorioVendas(await repo.vendas(filialId, p, agrupar));
-    return { ...p.toJSON(), agrupar, linhas: rel.linhas, totais: rel.totais };
+    return { ...p.toJSON(), agrupar, linhas: rel.linhas, totais: rel.totais, margem_estimada: MARGEM_ESTIMADA };
   }
 
   async ranking(filialId: number, tipo: TipoRanking, entrada: PeriodoInput, limite: number) {
     const repo = this.repo;
     const p = await this.periodo(repo, entrada);
     const rel = new RelatorioVendas(await repo.vendas(filialId, p, AGRUPAMENTO_DO_RANKING[tipo]));
-    return { ...p.toJSON(), tipo, limite, ...Ranking.montar(rel.linhas, limite) };
+    return { ...p.toJSON(), tipo, limite, ...Ranking.montar(rel.linhas, limite), margem_estimada: MARGEM_ESTIMADA };
   }
 
   async resumoFinanceiro(filialId: number, entrada: PeriodoInput) {

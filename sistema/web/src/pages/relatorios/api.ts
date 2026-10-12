@@ -23,10 +23,17 @@ export interface LinhaVenda {
   unidade?: string;
 }
 
+/** A margem usa o custo ATUAL do produto (não o da data da venda); a API manda a nota para exibir. */
+export interface MargemEstimada {
+  base_custo: 'custo_atual_produto';
+  nota: string;
+}
+
 export interface RelatorioVendas extends Periodo {
   agrupar: Agrupamento;
   linhas: LinhaVenda[];
   totais: Omit<LinhaVenda, 'chave' | 'rotulo' | 'medida' | 'unidade'>;
+  margem_estimada: MargemEstimada;
 }
 
 export interface PosicaoRanking {
@@ -46,6 +53,7 @@ export interface RelatorioRanking extends Periodo {
   limite: number;
   items: PosicaoRanking[];
   total_geral: number;
+  margem_estimada: MargemEstimada;
 }
 
 export interface ResumoFinanceiro extends Periodo {

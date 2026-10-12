@@ -1,7 +1,7 @@
-import { notFound } from '../../lib/http.js';
+import { conflict, notFound } from '../../lib/http.js';
 import type { CaixaRepository } from './caixa.repository.js';
 import { Titulo } from './domain/titulo.js';
-import type { TituloRepository } from './titulo.repository.js';
+import type { TituloRepository, TituloTravado } from './titulo.repository.js';
 
 export interface DadosBaixa {
   /** Sem valor, baixa o saldo inteiro. */
@@ -33,25 +33,42 @@ export class MovimentacaoTitulos {
     private readonly sentido: SentidoTitulo,
   ) {}
 
-  private async carregar(id: number, filialId?: number) {
-    const dados = await this.titulos.travar(id, filialId);
+  /** Carrega e bloqueia o título da filial; 404 se não existir nela. */
+  private async carregar(id: number, filialId: number) {
+    return this.exigir(await this.titulos.travar(id, filialId));
+  }
+
+  private exigir(dados: TituloTravado | undefined) {
     if (!dados) throw notFound('Título');
     return { titulo: Titulo.de(dados), filialId: dados.filial_id };
   }
 
-  /** Baixa parcial ou total, com lançamento no caixa. Retorna o valor baixado. */
-  async baixar(id: number, filialId: number | undefined, b: DadosBaixa): Promise<number> {
-    const { titulo, filialId: filial } = await this.carregar(id, filialId);
+  /** Baixa parcial ou total de um título da filial, com lançamento no caixa. Retorna o valor baixado. */
+  async baixar(id: number, filialId: number, b: DadosBaixa): Promise<number> {
+    return this.aplicarBaixa(await this.carregar(id, filialId), b);
+  }
+
+  /**
+   * Baixa pedida pela porta FinanceiroPort (sem filial na assinatura): o título precisa existir (404)
+   * e estar em aberto (409). O lançamento de caixa vai para a filial do próprio título.
+   */
+  async baixarPelaPorta(id: number, b: DadosBaixa): Promise<number> {
+    const carregado = this.exigir(await this.titulos.travarPelaPorta(id));
+    if (carregado.titulo.status !== 'aberto') throw conflict('Título não está em aberto');
+    return this.aplicarBaixa(carregado, b);
+  }
+
+  private async aplicarBaixa({ titulo, filialId }: { titulo: Titulo; filialId: number }, b: DadosBaixa): Promise<number> {
     const baixa = titulo.baixar(b.valor);
-    await this.titulos.registrarPagamento(id, { valor_pago: baixa.valorPago, status: baixa.status, data: b.data, forma_pagamento: b.forma_pagamento });
+    await this.titulos.registrarPagamento(titulo.id, { valor_pago: baixa.valorPago, status: baixa.status, data: b.data, forma_pagamento: b.forma_pagamento });
     await this.caixa.inserir({
-      filial_id: filial,
+      filial_id: filialId,
       data: b.data,
       tipo: this.sentido.baixa,
       valor: baixa.valor,
       descricao: titulo.descricaoMovimento(this.sentido.rotulo),
       forma_pagamento: b.forma_pagamento,
-      [this.sentido.fk]: id,
+      [this.sentido.fk]: titulo.id,
       usuario_id: b.usuario_id,
     });
     return baixa.valor;

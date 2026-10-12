@@ -20,7 +20,7 @@ function Atalhos() {
   return (
     <div className="actions" style={{ marginBottom: 16 }}>
       {can(user, 'vendedor') && <Link className="btn primary" to="/orcamentos/novo">Novo orçamento</Link>}
-      {can(user, 'producao') && <Link className="btn" to="/producao">Ordens de produção</Link>}
+      {can(user, 'producao') && <Link className="btn" to="/producao/ordens">Ordens de produção</Link>}
       {can(user, 'financeiro', 'vendedor') && <Link className="btn" to="/financeiro/receber">Contas a receber</Link>}
     </div>
   );

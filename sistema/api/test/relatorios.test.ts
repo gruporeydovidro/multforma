@@ -79,6 +79,24 @@ describe('relatórios', () => {
     expect(r.totais).toEqual({ quantidade: 2, total: 1220, total_itens: 1190, custo: 510, margem: 680, margem_pct: 57.14 });
   });
 
+  it('regressão: venda fechada às 23h30 de Brasília conta no próprio dia (fuso da empresa)', async () => {
+    // 23h30 em Brasília = 02h30 UTC do dia seguinte; em UTC cairia em 01/06 e fora de maio.
+    await criarOrcamento({ cliente_id: clienteB, fechado_em: '2025-05-31T23:30:00-03:00', total: 123, itens: [{ codigo: 'VT8', quantidade: 1, medida: 1, total: 123 }] });
+    const maio = (await get('/vendas?de=2025-05-01&ate=2025-05-31&agrupar=dia')).json();
+    expect(maio.linhas.map((l: any) => [l.chave, l.quantidade, l.total])).toEqual([['2025-05-31', 1, 123]]);
+    const junho = (await get('/vendas?de=2025-06-01&ate=2025-06-30&agrupar=dia')).json();
+    expect(junho.linhas).toEqual([]);
+    expect((await get('/resumo-financeiro?de=2025-05-31&ate=2025-05-31')).json().vendas).toEqual({ quantidade: 1, total: 123 });
+  });
+
+  it('a margem é marcada como estimada pelo custo atual do produto', async () => {
+    for (const url of [`/vendas?${marco}`, `/ranking/clientes?${marco}`]) {
+      const r = (await get(url)).json();
+      expect(r.margem_estimada).toMatchObject({ base_custo: 'custo_atual_produto' });
+      expect(r.margem_estimada.nota).toMatch(/custo ATUAL do produto/);
+    }
+  });
+
   it('vendas por vendedor, cliente e produto', async () => {
     const vend = (await get(`/vendas?${marco}&agrupar=vendedor`)).json();
     expect(vend.linhas.map((l: any) => [l.rotulo, l.total])).toEqual([['Vendedor Padrão', 770], ['Sem vendedor', 450]]);

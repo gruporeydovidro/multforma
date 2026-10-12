@@ -4,11 +4,13 @@ import { date, money } from '../../../lib/format';
 import { useAsync } from '../../../lib/useAsync';
 import { financeiroApi } from '../api';
 
-/** Quadro de alerta: contas a pagar vencidas e a vencer nos próximos N dias. */
+/**
+ * Quadro de alerta: contas a pagar vencidas e a vencer nos próximos N dias.
+ * O quadro e o seletor de dias ficam sempre visíveis; sem contas no período, mostra só o aviso.
+ */
 export function AlertaVencimentos({ versao }: { versao: number }) {
   const [dias, setDias] = useState(7);
   const { data, error } = useAsync(() => financeiroApi.pagar.alerta(dias), [dias, versao]);
-  if (data && !data.vencidas.length && !data.a_vencer.length) return null;
   const linhas = [...(data?.vencidas ?? []), ...(data?.a_vencer ?? [])];
   return (
     <Card title="Alerta de vencimentos" actions={
@@ -17,7 +19,10 @@ export function AlertaVencimentos({ versao }: { versao: number }) {
       </Select>
     }>
       <Alert>{error}</Alert>
-      {data && (
+      {data && linhas.length === 0 && (
+        <p className="muted" style={{ margin: 0 }}>Nenhuma conta vencida ou a vencer nos próximos {data.dias} dias.</p>
+      )}
+      {data && linhas.length > 0 && (
         <>
           <p style={{ marginTop: 0 }}>
             {data.vencidas.length > 0 && <span style={{ color: 'var(--danger)' }}><strong>{data.vencidas.length}</strong> vencida(s): <strong>{money(data.total_vencido)}</strong>. </span>}

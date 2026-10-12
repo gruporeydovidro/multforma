@@ -9,7 +9,7 @@ import { MovimentacaoTitulos, SENTIDO_RECEBER } from './movimentacao-titulos.js'
 import type { FabricaRepositorios, RepositoriosFinanceiro } from './repositorios.js';
 import { ServicoFinanceiro } from './servico-base.js';
 
-/** Casos de uso de contas a receber. A geração e a baixa passam pela porta FinanceiroPort. */
+/** Casos de uso de contas a receber. A geração passa pela porta FinanceiroPort; baixa, estorno e cancelamento filtram pela filial do usuário. */
 export class ContaReceberService extends ServicoFinanceiro {
   constructor(private readonly financeiro: FinanceiroPort, fabrica?: FabricaRepositorios) {
     super(fabrica);
@@ -55,13 +55,11 @@ export class ContaReceberService extends ServicoFinanceiro {
     });
   }
 
+  /** Baixa pela rota: o título é localizado sempre na filial do usuário (404 se for de outra filial). */
   baixar(u: SessionUser, id: number, b: BaixaInput) {
     return this.emTransacao(async (r, db) => {
-      const atual = await r.receber.travar(id, u.filial_id);
-      if (!atual) throw notFound('Título');
-      const valor = b.valor ?? Dinheiro.subtrair(atual.valor, atual.valor_pago);
       const data = b.data ?? (await r.apoio.hoje());
-      await this.financeiro.baixarContaReceber(db, { id, valor, data, forma_pagamento: b.forma_pagamento, usuario_id: u.id });
+      const valor = await this.movimentacao(r).baixar(id, u.filial_id, { valor: b.valor, data, forma_pagamento: b.forma_pagamento, usuario_id: u.id });
       await logAcao(db, u.id, 'baixar_conta_receber', 'conta_receber', id, { valor, data, forma_pagamento: b.forma_pagamento });
       return this.detalhe(r, u.filial_id, id);
     });

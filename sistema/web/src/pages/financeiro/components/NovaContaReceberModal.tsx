@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Alert, AsyncSelect, Input, Modal, Select, TextArea } from '../../../components/ui';
 import { today } from '../../../lib/format';
 import { buscarPessoas, financeiroApi, type FormaPagamento } from '../api';
-import { FORMAS_PAGAMENTO, lerValor } from '../format';
-import { useAcao } from '../hooks';
+import { FORMAS_PAGAMENTO } from '../format';
+import { lerNumero } from '../../../lib/numero';
+import { useEnvio } from '../../../lib/useEnvio';
 import { PreviaParcelas } from './PreviaParcelas';
 
 const buscarClientes = buscarPessoas('cliente');
@@ -17,16 +18,17 @@ export function NovaContaReceberModal({ aberto, onFechar, onSalvo }: { aberto: b
   const [forma, setForma] = useState<FormaPagamento>('boleto');
   const [documento, setDocumento] = useState('');
   const [observacao, setObservacao] = useState('');
-  const { enviando, erro, setErro, executar } = useAcao();
+  const { busy: enviando, error: erro, setError: setErro, run: executar } = useEnvio();
 
   useEffect(() => {
     if (!aberto) return;
-    setClienteId(null); setValor(''); setParcelas(1); setVencimento(today()); setForma('boleto'); setDocumento(''); setObservacao(''); setErro(undefined);
+    setClienteId(null); setValor(''); setParcelas(1); setVencimento(today()); setForma('boleto'); setDocumento(''); setObservacao(''); setErro('');
   }, [aberto, setErro]);
 
-  const total = lerValor(valor);
+  const total = lerNumero(valor) ?? 0;
   const valido = !!clienteId && total > 0 && parcelas >= 1 && !!vencimento;
   const salvar = async () => {
+    if (!valido) return;
     const r = await executar(() => financeiroApi.receber.criar({
       cliente_id: clienteId!, valor_total: total, parcelas, primeiro_vencimento: vencimento,
       forma_pagamento: forma, documento: documento || null, observacao: observacao || null,
@@ -35,7 +37,7 @@ export function NovaContaReceberModal({ aberto, onFechar, onSalvo }: { aberto: b
   };
 
   return (
-    <Modal title="Nova conta a receber" open={aberto} onClose={onFechar} wide
+    <Modal title="Nova conta a receber" open={aberto} onClose={enviando ? () => undefined : onFechar} wide
       footer={<>
         <button className="btn" onClick={onFechar} disabled={enviando}>Cancelar</button>
         <button className="btn primary" onClick={salvar} disabled={enviando || !valido}>{enviando ? 'Gravando…' : 'Gravar'}</button>

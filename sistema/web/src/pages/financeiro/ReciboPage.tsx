@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { Alert, PageHeader } from '../../components/ui';
 import { useAuth } from '../../lib/auth';
 import { date, money } from '../../lib/format';
@@ -10,6 +10,8 @@ import { rotuloForma, valorPorExtenso } from './format';
 export function ReciboPage() {
   const { id } = useParams();
   const { user } = useAuth();
+  // Volta à lista com os mesmos filtros (a lista passa a sua query string no state do link).
+  const voltar = (useLocation().state as { voltar?: string } | null)?.voltar ?? '';
   const { data: t, error } = useAsync(() => financeiroApi.receber.obter(Number(id)), [id]);
   const recebimentos = t?.pagamentos?.filter((p) => p.tipo === 'entrada') ?? [];
   const ultimo = recebimentos[recebimentos.length - 1];
@@ -18,7 +20,7 @@ export function ReciboPage() {
     <>
       <div className="no-print">
         <PageHeader title="Recibo de pagamento" actions={<>
-          <Link className="btn" to="/financeiro/receber">Voltar</Link>
+          <Link className="btn" to={`/financeiro/receber${voltar}`}>Voltar</Link>
           <button className="btn primary" onClick={() => window.print()} disabled={!t || !t.valor_pago}>Imprimir</button>
         </>} />
       </div>

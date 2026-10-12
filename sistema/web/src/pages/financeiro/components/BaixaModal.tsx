@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Alert, Input, Modal, Select } from '../../../components/ui';
 import { decimal, money, today } from '../../../lib/format';
 import type { Baixa, FormaPagamento } from '../api';
-import { FORMAS_PAGAMENTO, lerValor } from '../format';
-import { useAcao } from '../hooks';
+import { FORMAS_PAGAMENTO } from '../format';
+import { lerNumero } from '../../../lib/numero';
+import { useEnvio } from '../../../lib/useEnvio';
 
 /** Modal de baixa (parcial ou total) de um título. */
 export function BaixaModal({ titulo, descricao, aberto, onFechar, onConfirmar }: {
@@ -16,19 +17,20 @@ export function BaixaModal({ titulo, descricao, aberto, onFechar, onConfirmar }:
   const [valor, setValor] = useState('');
   const [data, setData] = useState(today());
   const [forma, setForma] = useState<FormaPagamento>('dinheiro');
-  const { enviando, erro, setErro, executar } = useAcao();
+  const { busy: enviando, error: erro, setError: setErro, run: executar } = useEnvio();
 
   useEffect(() => {
     if (!aberto || !titulo) return;
     setValor(decimal(titulo.saldo));
     setData(today());
     setForma(titulo.forma_pagamento && titulo.forma_pagamento !== 'a_prazo' ? titulo.forma_pagamento : 'dinheiro');
-    setErro(undefined);
+    setErro('');
   }, [aberto, titulo, setErro]);
 
-  const v = lerValor(valor);
+  const v = lerNumero(valor) ?? 0;
   const invalido = !(v > 0) || (titulo ? v > titulo.saldo + 0.001 : true);
   const confirmar = async () => {
+    if (invalido) return;
     const r = await executar(() => onConfirmar({ valor: v, data, forma_pagamento: forma }));
     if (r !== undefined) onFechar();
   };
@@ -37,7 +39,7 @@ export function BaixaModal({ titulo, descricao, aberto, onFechar, onConfirmar }:
     <Modal
       title="Baixar título"
       open={aberto}
-      onClose={onFechar}
+      onClose={enviando ? () => undefined : onFechar}
       footer={
         <>
           <button className="btn" onClick={onFechar} disabled={enviando}>Cancelar</button>
