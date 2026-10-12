@@ -10,8 +10,11 @@ import type { FabricaRepositoriosEstoque } from './repositorios.js';
 export class EstoqueService implements EstoquePort {
   constructor(private readonly repos: FabricaRepositoriosEstoque) {}
 
-  registrarMovimento(db: Db, m: MovimentoEstoqueInput): Promise<number> {
-    return this.repos(db).movimentos.inserir({ ...m, quantidade: MovimentoEstoque.quantidadeComSinal(m.tipo, m.quantidade) });
+  /** Grava o movimento sob o bloqueio do produto, o mesmo usado pelas entradas, saídas e acertos manuais. */
+  async registrarMovimento(db: Db, m: MovimentoEstoqueInput): Promise<number> {
+    const movimentos = this.repos(db).movimentos;
+    await movimentos.travarProduto(m.produto_id);
+    return movimentos.inserir({ ...m, quantidade: MovimentoEstoque.quantidadeComSinal(m.tipo, m.quantidade) });
   }
 
   saldo(db: Db, filialId: number, produtoId: number): Promise<number> {

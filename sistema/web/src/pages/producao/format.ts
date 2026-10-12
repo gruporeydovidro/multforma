@@ -39,5 +39,12 @@ export function progresso(o: Pick<OrdemResumo, 'itens_total' | 'itens_concluidos
   return { texto: `${o.itens_concluidos}/${o.itens_total}`, pct };
 }
 
+/** Peças processadas e restantes do item no setor atual (o item avança quando o restante zera). */
+export function saldoNoSetor(i: { quantidade: number; processado_setor?: number | null }) {
+  const processado = i.processado_setor ?? 0;
+  const restante = Math.max(Math.round((i.quantidade - processado) * 1000) / 1000, 0);
+  return { processado, restante };
+}
+
 export const ordemAberta = (s: StatusOrdem) => s === 'aguardando' || s === 'em_producao';
 export const itemMarcavel = (s: StatusItem) => s === 'pendente' || s === 'em_producao';

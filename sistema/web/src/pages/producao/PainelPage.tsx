@@ -6,7 +6,7 @@ import { date } from '../../lib/format';
 import { useAsync } from '../../lib/useAsync';
 import { producaoApi, type ItemPainel } from './api';
 import { MarcarModal, type ItemParaMarcar } from './components/MarcarModal';
-import { medidas, quantidade } from './format';
+import { medidas, quantidade, saldoNoSetor } from './format';
 import { useEnvio, useMotivos } from './hooks';
 
 const CHAVE_SETOR = 'vg.producao.painel.setor';
@@ -35,6 +35,7 @@ const paraMarcar = (i: ItemPainel): ItemParaMarcar & { ordem_id: number } => ({
   largura_mm: i.largura_mm,
   altura_mm: i.altura_mm,
   setor_atual_id: i.setor_atual_id,
+  processado_setor: i.processado_setor,
 });
 
 const botaoGrande = { fontSize: 18, padding: '14px 22px', minWidth: 150 } as const;
@@ -46,7 +47,8 @@ export function PainelPage() {
   const painel = useAsync(() => producaoApi.painel(), []);
   const { data: motivos } = useMotivos();
   const [setorId, setSetorId] = useState<number | null>(lerSetor);
-  const [defeito, setDefeito] = useState<(ItemParaMarcar & { ordem_id: number }) | null>(null);
+  /** Item aberto no modal de marcação: com defeito ou marcação parcial. */
+  const [marcando, setMarcando] = useState<{ item: ItemParaMarcar & { ordem_id: number }; defeito: boolean } | null>(null);
   const [aviso, setAviso] = useState('');
   const envio = useEnvio();
 
@@ -63,8 +65,10 @@ export function PainelPage() {
     setAviso('');
   };
 
+  /** Marca as peças restantes no setor (o item avança para o próximo). */
   const concluir = async (i: ItemPainel) => {
-    const ok = await envio.run(() => producaoApi.marcar(i.ordem_id, i.item_id, { setor_id: i.setor_atual_id!, quantidade: i.quantidade }));
+    const { restante } = saldoNoSetor(i);
+    const ok = await envio.run(() => producaoApi.marcar(i.ordem_id, i.item_id, { setor_id: i.setor_atual_id!, quantidade: restante }));
     if (ok) {
       setAviso(`Ordem ${i.ordem_numero}: "${i.descricao}" concluída em ${atual?.nome}.`);
       painel.reload();
@@ -98,6 +102,9 @@ export function PainelPage() {
                 <div>
                   <div style={{ fontSize: 18, fontWeight: 700 }}>{medidas(i)} <span className="muted" style={{ fontWeight: 400 }}>× {quantidade(i.quantidade)} pç</span></div>
                   <div>{i.descricao}</div>
+                  {i.processado_setor > 0 && (
+                    <div><Badge tone="blue">{quantidade(i.processado_setor)} de {quantidade(i.quantidade)} feitas</Badge> faltam {quantidade(saldoNoSetor(i).restante)}</div>
+                  )}
                   <div className="muted">
                     <Link to={`/producao/ordens/${i.ordem_id}`}>Ordem {i.ordem_numero}</Link> · {i.cliente_nome} · entrega {date(i.previsao_entrega) || '—'}{' '}
                     {i.atrasada && <Badge tone="orange">Atrasada</Badge>}
@@ -105,8 +112,13 @@ export function PainelPage() {
                 </div>
                 {podeMarcar && (
                   <div className="actions">
-                    <button className="btn danger" style={botaoGrande} disabled={envio.busy} onClick={() => setDefeito(paraMarcar(i))}>Defeito</button>
-                    <button className="btn primary" style={botaoGrande} disabled={envio.busy} onClick={() => concluir(i)}>✓ Concluir</button>
+                    <button className="btn danger" style={botaoGrande} disabled={envio.busy} onClick={() => setMarcando({ item: paraMarcar(i), defeito: true })}>Defeito</button>
+                    {i.quantidade > 1 && (
+                      <button className="btn" style={botaoGrande} disabled={envio.busy} onClick={() => setMarcando({ item: paraMarcar(i), defeito: false })}>Parcial…</button>
+                    )}
+                    <button className="btn primary" style={botaoGrande} disabled={envio.busy} onClick={() => concluir(i)}>
+                      ✓ Concluir{i.processado_setor > 0 ? ` (${quantidade(saldoNoSetor(i).restante)})` : ''}
+                    </button>
                   </div>
                 )}
               </div>
@@ -130,17 +142,17 @@ export function PainelPage() {
         </Card>
       )}
 
-      {defeito && (
+      {marcando && (
         <MarcarModal
-          ordemId={defeito.ordem_id}
-          item={defeito}
-          defeito
+          ordemId={marcando.item.ordem_id}
+          item={marcando.item}
+          defeito={marcando.defeito}
           setores={setores}
           motivos={motivos ?? []}
-          onClose={() => setDefeito(null)}
+          onClose={() => setMarcando(null)}
           onDone={() => {
-            setDefeito(null);
-            setAviso('Defeito registrado.');
+            setAviso(marcando.defeito ? 'Defeito registrado.' : 'Marcação registrada.');
+            setMarcando(null);
             painel.reload();
           }}
         />

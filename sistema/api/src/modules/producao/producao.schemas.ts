@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { listQuery } from '../../lib/paging.js';
+import { dataIso as data, quantidade } from '../../shared/validacao.js';
 
-const id = z.coerce.number().int().positive();
-const data = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data no formato AAAA-MM-DD');
+/** Chave serial (integer do Postgres): acima disso o banco daria erro de overflow. */
+const id = z.coerce.number().int().positive().max(2_147_483_647);
 const bool = z.enum(['true', 'false']).transform((v) => v === 'true');
 
 export const idParam = z.object({ id });
@@ -13,7 +14,7 @@ export const setoresQuery = z.object({ ativo: bool.optional() });
 
 export const setorBody = z.object({
   nome: z.string().trim().min(1).max(60),
-  ordem: z.coerce.number().int().min(0).default(0),
+  ordem: z.coerce.number().int().min(0).max(1_000_000).default(0),
   ativo: z.boolean().default(true),
 });
 
@@ -40,7 +41,7 @@ export const cancelarBody = z.object({ motivo: z.string().trim().max(500).option
 export const marcarBody = z
   .object({
     setor_id: id,
-    quantidade: z.coerce.number().positive().optional(),
+    quantidade: quantidade.optional(),
     defeito: z.boolean().default(false),
     motivo_id: id.nullable().optional(),
     observacao: z.string().trim().max(500).nullable().optional(),

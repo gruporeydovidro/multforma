@@ -7,7 +7,7 @@ import { useAsync } from '../../lib/useAsync';
 import { producaoApi, type ItemOrdem, type MarcacaoHistorico, type OrdemDetalhe } from './api';
 import { MarcarModal } from './components/MarcarModal';
 import { StatusItemBadge, StatusOrdemBadge } from './components/StatusBadges';
-import { areaM2, itemMarcavel, medidas, ordemAberta, progresso, quantidade } from './format';
+import { areaM2, itemMarcavel, medidas, ordemAberta, progresso, quantidade, saldoNoSetor } from './format';
 import { useEnvio, useMotivos } from './hooks';
 
 export function OrdemPage() {
@@ -70,7 +70,16 @@ export function OrdemPage() {
             { header: 'Qtd', render: (i) => quantidade(i.quantidade), align: 'right' },
             { header: 'Medidas (L x A)', render: (i) => medidas(i) },
             { header: 'm²', render: (i) => { const a = areaM2(i); return a === null ? '—' : decimal(a, 3); }, align: 'right' },
-            { header: 'Setor atual', render: (i) => i.setor_atual_nome ?? '—' },
+            {
+              header: 'Setor atual',
+              render: (i) =>
+                i.setor_atual_nome ? (
+                  <>
+                    {i.setor_atual_nome}
+                    {i.processado_setor > 0 && <div className="muted">{quantidade(saldoNoSetor(i).processado)} de {quantidade(i.quantidade)} processada(s)</div>}
+                  </>
+                ) : '—',
+            },
             { header: 'Status', render: (i) => <><StatusItemBadge status={i.status} />{i.defeitos > 0 && <> <Badge tone="orange">{i.defeitos} defeito(s)</Badge></>}</> },
             {
               header: '',

@@ -43,6 +43,16 @@ const FILTRO = `
      and ($6::text is null or o.numero::text = $6 or orc.numero::text = $6 or c.nome ilike '%' || $6 || '%')
      and (not $7::boolean or ${ATRASADA})`;
 
+/**
+ * Peças do item já processadas (sem defeito) no setor atual. Derivado de producao_marcacao:
+ * soma as marcações sem defeito no setor atual posteriores à última marcação com defeito do item
+ * (só se volta a um setor por "refazer", que exige um defeito antes; e ao avançar o item muda de setor).
+ */
+const PROCESSADO_NO_SETOR = `
+  (select coalesce(sum(pm.quantidade), 0) from producao_marcacao pm
+    where pm.ordem_item_id = i.id and pm.setor_id = i.setor_atual_id and not pm.defeito
+      and pm.id > coalesce((select max(d.id) from producao_marcacao d where d.ordem_item_id = i.id and d.defeito), 0))`;
+
 /** Acesso às ordens de produção, seus itens e marcações. */
 export class OrdemProducaoRepository {
   constructor(private readonly db: Db) {}
@@ -75,12 +85,15 @@ export class OrdemProducaoRepository {
       this.db,
     );
     if (!o) return undefined;
-    const itens = await query<{ id: number; quantidade: number; setor_atual_id: number | null; status: StatusItem }>(
-      'select id, quantidade, setor_atual_id, status from ordem_producao_item where ordem_id = $1 order by id for update',
+    // Trava os itens antes de ler o acumulado (a ordem já está travada, o que serializa as marcações).
+    await query('select id from ordem_producao_item where ordem_id = $1 order by id for update', [id], this.db);
+    const itens = await query<{ id: number; quantidade: number; setor_atual_id: number | null; status: StatusItem; processado: number }>(
+      `select i.id, i.quantidade, i.setor_atual_id, i.status, ${PROCESSADO_NO_SETOR} as processado
+         from ordem_producao_item i where i.ordem_id = $1 order by i.id`,
       [id],
       this.db,
     );
-    return new OrdemProducao(o.id, o.status, itens.map((i) => new ItemProducao(i.id, i.quantidade, i.setor_atual_id, i.status)));
+    return new OrdemProducao(o.id, o.status, itens.map((i) => new ItemProducao(i.id, i.quantidade, i.setor_atual_id, i.status, i.processado)));
   }
 
   /** Grava o status da ordem (com as datas dos eventos) e o estado do item alterado. */
@@ -168,7 +181,8 @@ export class OrdemProducaoRepository {
     const itens = await query(
       `select i.id, i.orcamento_item_id, i.produto_id, p.codigo as produto_codigo, p.espessura_mm, oi.ambiente,
               i.descricao, i.quantidade, i.largura_mm, i.altura_mm, i.status, i.setor_atual_id, s.nome as setor_atual_nome,
-              (select count(*)::int from producao_marcacao m where m.ordem_item_id = i.id and m.defeito) as defeitos
+              (select count(*)::int from producao_marcacao m where m.ordem_item_id = i.id and m.defeito) as defeitos,
+              ${PROCESSADO_NO_SETOR} as processado_setor
          from ordem_producao_item i
          join produto p on p.id = i.produto_id
          left join orcamento_item oi on oi.id = i.orcamento_item_id
@@ -198,7 +212,8 @@ export class OrdemProducaoRepository {
   itensEmAberto(filialId: number) {
     return query(
       `select i.id as item_id, i.ordem_id, o.numero as ordem_numero, c.nome as cliente_nome, i.descricao, i.quantidade,
-              i.largura_mm, i.altura_mm, i.status, i.setor_atual_id, s.nome as setor_atual_nome, o.previsao_entrega, ${ATRASADA} as atrasada
+              i.largura_mm, i.altura_mm, i.status, i.setor_atual_id, s.nome as setor_atual_nome, o.previsao_entrega, ${ATRASADA} as atrasada,
+              ${PROCESSADO_NO_SETOR} as processado_setor
          from ordem_producao_item i
          join ordem_producao o on o.id = i.ordem_id
          join orcamento orc on orc.id = o.orcamento_id

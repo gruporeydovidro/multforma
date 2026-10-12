@@ -1,34 +1,31 @@
-import { useSearchParams } from 'react-router-dom';
 import { Alert, Card, DataTable, Input, PageHeader, Pager, Select } from '../../components/ui';
 import { dateTime, money } from '../../lib/format';
-import { estoqueApi, type FiltroMovimentos, type Movimento, type OrigemMovimento, type TipoMovimento } from './api';
+import type { Movimento } from './api';
 import { ProdutoSelect } from './components/ProdutoSelect';
 import { TipoBadge } from './components/TipoBadge';
 import { ORIGENS, qtd, TIPOS } from './format';
-import { useListaFiltrada, useSaldoProduto } from './hooks';
+import { useMovimentos } from './hooks';
 
+/** Movimentações de estoque: todos os filtros ficam na URL (clicar no menu limpa a lista). */
 export function MovimentosPage() {
-  const [params] = useSearchParams();
-  const inicial: FiltroMovimentos = { produto_id: Number(params.get('produto_id')) || null };
-  const { filtro, setFiltro, setPage, data, error } = useListaFiltrada(estoqueApi.movimentos, inicial);
-  const { data: produtoInicial } = useSaldoProduto(inicial.produto_id ?? null);
+  const { filtros, filtrar, setPage, produto, data, error } = useMovimentos();
 
   return (
     <>
       <PageHeader title="Movimentações de estoque" />
       <Card>
         <div className="grid">
-          <ProdutoSelect className="col-4" value={filtro.produto_id ?? null} onChange={(produto_id) => setFiltro({ produto_id })} initialLabel={produtoInicial ? `${produtoInicial.codigo} — ${produtoInicial.nome}` : undefined} />
-          <Select label="Tipo" className="col-2" value={filtro.tipo ?? ''} onChange={(e) => setFiltro({ tipo: e.target.value as TipoMovimento | '' })}>
+          <ProdutoSelect className="col-4" value={produto.value} onChange={produto.onChange} initialLabel={produto.initialLabel} />
+          <Select label="Tipo" className="col-2" value={filtros.tipo} onChange={(e) => filtrar({ tipo: e.target.value })}>
             <option value="">Todos</option>
             {Object.entries(TIPOS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </Select>
-          <Select label="Origem" className="col-2" value={filtro.origem ?? ''} onChange={(e) => setFiltro({ origem: e.target.value as OrigemMovimento | '' })}>
+          <Select label="Origem" className="col-2" value={filtros.origem} onChange={(e) => filtrar({ origem: e.target.value })}>
             <option value="">Todas</option>
             {Object.entries(ORIGENS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </Select>
-          <Input label="De" type="date" className="col-2" value={filtro.de ?? ''} onChange={(e) => setFiltro({ de: e.target.value })} />
-          <Input label="Até" type="date" className="col-2" value={filtro.ate ?? ''} onChange={(e) => setFiltro({ ate: e.target.value })} />
+          <Input label="De" type="date" className="col-2" value={filtros.de} onChange={(e) => filtrar({ de: e.target.value })} />
+          <Input label="Até" type="date" className="col-2" value={filtros.ate} onChange={(e) => filtrar({ ate: e.target.value })} />
         </div>
       </Card>
       <Alert>{error}</Alert>

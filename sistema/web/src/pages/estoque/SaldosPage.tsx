@@ -1,14 +1,15 @@
 import { Link } from 'react-router-dom';
 import { Alert, Badge, Card, DataTable, PageHeader, Pager, SearchBox } from '../../components/ui';
+import { qs } from '../../lib/api';
 import { can, useAuth } from '../../lib/auth';
 import { money } from '../../lib/format';
-import { estoqueApi, type FiltroSaldos, type SaldoProduto } from './api';
+import { estoqueApi, type SaldoProduto } from './api';
 import { qtd } from './format';
-import { useListaFiltrada } from './hooks';
+import { FILTROS_SALDOS_PADRAO, saldosParaApi, useListaUrl } from './hooks';
 
 export function SaldosPage() {
   const { user } = useAuth();
-  const { filtro, setFiltro, setPage, data, error } = useListaFiltrada(estoqueApi.saldos, {} as FiltroSaldos);
+  const { filtros, filtrar, setPage, data, error } = useListaUrl(FILTROS_SALDOS_PADRAO, saldosParaApi, estoqueApi.saldos);
   const valorPagina = (data?.items ?? []).reduce((s, i) => s + i.valor_estoque, 0);
 
   return (
@@ -27,9 +28,9 @@ export function SaldosPage() {
       />
       <Card>
         <div className="actions">
-          <SearchBox value={filtro.q ?? ''} onChange={(q) => setFiltro({ q })} placeholder="Código ou nome do produto" />
+          <SearchBox value={filtros.q} onChange={(q) => filtrar({ q })} placeholder="Código ou nome do produto" />
           <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input type="checkbox" checked={!!filtro.abaixo_minimo} onChange={(e) => setFiltro({ abaixo_minimo: e.target.checked })} />
+            <input type="checkbox" checked={filtros.abaixo_minimo === '1'} onChange={(e) => filtrar({ abaixo_minimo: e.target.checked ? '1' : '' })} />
             Só abaixo do mínimo
           </label>
         </div>
@@ -40,7 +41,7 @@ export function SaldosPage() {
         rowKey={(s) => s.produto_id}
         columns={[
           { header: 'Código', render: (s) => s.codigo, width: '90px' },
-          { header: 'Produto', render: (s) => <Link to={`/estoque/movimentos?produto_id=${s.produto_id}`}>{s.nome}</Link> },
+          { header: 'Produto', render: (s) => <Link to={`/estoque/movimentos${qs({ produto_id: s.produto_id, produto_nome: `${s.codigo} — ${s.nome}` })}`}>{s.nome}</Link> },
           { header: 'Un.', render: (s) => s.unidade_venda },
           {
             header: 'Saldo',

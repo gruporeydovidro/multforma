@@ -1,5 +1,5 @@
 import type { AcertoInput, EntradaInput, SaidaInput } from './api';
-import { numero } from './format';
+import { lerNumero } from '../../lib/numero';
 
 // Regras puras do formulário de movimentação (entrada, saída e acerto).
 
@@ -39,15 +39,15 @@ export function montarRequisicao(modo: ModoMovimento, f: MovimentoForm): { erro:
   if (!f.produto_id) return { erro: 'Selecione o produto.' };
   const observacao = f.observacao.trim() || null;
   if (modo === 'acerto') {
-    const contado = numero(f.saldo_contado);
+    const contado = lerNumero(f.saldo_contado);
     if (contado === null || contado < 0) return { erro: 'Informe o saldo contado (zero ou mais).' };
     return { modo, body: { produto_id: f.produto_id, saldo_contado: contado, observacao } };
   }
-  const quantidade = numero(f.quantidade);
+  const quantidade = lerNumero(f.quantidade);
   if (!quantidade || quantidade <= 0) return { erro: 'Informe a quantidade.' };
   const documento = f.documento.trim() || null;
   if (modo === 'saida') return { modo, body: { produto_id: f.produto_id, quantidade, documento, observacao } };
-  const custo = numero(f.custo_unitario);
+  const custo = lerNumero(f.custo_unitario);
   if (f.custo_unitario.trim() && (custo === null || custo < 0)) return { erro: 'Custo unitário inválido.' };
   return { modo, body: { produto_id: f.produto_id, quantidade, custo_unitario: custo, documento, observacao } };
 }

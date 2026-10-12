@@ -117,4 +117,106 @@ describe('estoque', () => {
     const saldos = (await req('GET', '/saldos?q=ESP4')).json();
     expect(saldos.items[0]).toMatchObject({ saldo: -2.5, abaixo_minimo: true });
   });
+
+  // ----- regressões da revisão (ficam no fim: os testes acima contam movimentos globais) -----
+
+  /** Produto novo, isolado dos demais testes. */
+  const novoProduto = async (codigo: string, custoInicial = 100) =>
+    (await queryOne<{ id: number }>(
+      `insert into produto (codigo, nome, tipo, unidade_venda, custo, preco_venda, controla_estoque)
+       values ($1, $1, 'produto', 'UN', $2, 10, true) returning id`,
+      [codigo, custoInicial],
+    ))!.id;
+  const filialPadrao = async () => (await queryOne<{ id: number }>('select min(id) as id from filial'))!.id;
+  const pendente = <T>(p: Promise<T>, ms = 300) => Promise.race([p.then(() => 'resolvida'), new Promise((r) => setTimeout(() => r('pendente'), ms))]);
+
+  /** Abre uma transação "de venda" que registra a saída pela porta e segura o bloqueio até commit(). */
+  async function vendaAberta(produtoId: number, quantidade: number) {
+    const svc = new EstoqueService(repositoriosEstoque);
+    const client = await getPool().connect();
+    await client.query('begin');
+    await svc.registrarMovimento(client, { filial_id: await filialPadrao(), produto_id: produtoId, tipo: 'saida', origem: 'venda', quantidade });
+    return {
+      commit: async () => {
+        await client.query('commit');
+        client.release();
+      },
+    };
+  }
+
+  it('concorrência: acerto aguarda a venda em andamento e chega ao saldo contado (10, venda de 3, contagem 8)', async () => {
+    const pid = await novoProduto('CONC1');
+    expect((await req('POST', '/entradas', { produto_id: pid, quantidade: 10 })).json().saldo).toBe(10);
+    const venda = await vendaAberta(pid, 3);
+    const acerto = req('POST', '/acertos', { produto_id: pid, saldo_contado: 8 });
+    expect(await pendente(acerto)).toBe('pendente'); // bloqueado pela venda: não lê o saldo 10 desatualizado
+    await venda.commit();
+    const res = await acerto;
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toMatchObject({ saldo: 8, diferenca: 1 });
+    expect((await req('GET', `/saldos/${pid}`)).json().saldo).toBe(8);
+  });
+
+  it('concorrência: saída manual valida o saldo depois da venda concorrente', async () => {
+    const pid = await novoProduto('CONC2');
+    await req('POST', '/entradas', { produto_id: pid, quantidade: 10 });
+    const venda = await vendaAberta(pid, 8);
+    const saida = req('POST', '/saidas', { produto_id: pid, quantidade: 5 });
+    expect(await pendente(saida)).toBe('pendente');
+    await venda.commit();
+    const res = await saida;
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/insuficiente/);
+    expect((await req('GET', `/saldos/${pid}`)).json().saldo).toBe(2);
+  });
+
+  it('a porta registrarMovimento aguarda outra movimentação em andamento do mesmo produto', async () => {
+    const pid = await novoProduto('CONC3');
+    const venda1 = await vendaAberta(pid, 1);
+    const svc = new EstoqueService(repositoriosEstoque);
+    const filial = await filialPadrao();
+    const venda2 = withTx((db) => svc.registrarMovimento(db, { filial_id: filial, produto_id: pid, tipo: 'saida', origem: 'venda', quantidade: 1 }));
+    expect(await pendente(venda2)).toBe('pendente');
+    await venda1.commit();
+    await venda2;
+    expect(await svc.saldo(getPool(), filial, pid)).toBe(-2);
+  });
+
+  it('não trava a linha do produto (tabela de Cadastros) ao movimentar', async () => {
+    const pid = await novoProduto('CONC4');
+    const client = await getPool().connect();
+    try {
+      await client.query('begin');
+      await client.query("update produto set nome = nome || ' (editado)' where id = $1", [pid]); // Cadastros editando o produto (no key update)
+      const res = req('POST', '/entradas', { produto_id: pid, quantidade: 2 });
+      expect(await pendente(res, 1500)).toBe('resolvida');
+      expect((await res).statusCode).toBe(201);
+    } finally {
+      await client.query('rollback');
+      client.release();
+    }
+  });
+
+  it('custo médio usa o saldo total de todas as filiais', async () => {
+    const pid = await novoProduto('CMG', 100);
+    const outra = (await queryOne<{ id: number }>(`insert into filial (nome, cidade, uf) values ('Filial 2', 'Campinas', 'SP') returning id`))!.id;
+    const svc = new EstoqueService(repositoriosEstoque);
+    await withTx((db) => svc.registrarMovimento(db, { filial_id: outra, produto_id: pid, tipo: 'entrada', origem: 'compra', quantidade: 10, custo_unitario: 100 }));
+    // filial do usuário com saldo zero; total = 10 a 100 → (10*100 + 10*130) / 20 = 115
+    const e = await req('POST', '/entradas', { produto_id: pid, quantidade: 10, custo_unitario: 130 });
+    expect(e.statusCode).toBe(201);
+    expect(e.json()).toMatchObject({ saldo: 10, custo: 115 });
+  });
+
+  it('schemas: data inválida e valores acima do limite dão 400', async () => {
+    expect((await req('GET', '/movimentos?de=2026-02-30')).statusCode).toBe(400);
+    expect((await req('GET', '/movimentos?ate=2026-13-01')).statusCode).toBe(400);
+    expect((await req('GET', '/movimentos?produto_id=99999999999')).statusCode).toBe(400);
+    expect((await req('GET', '/saldos/99999999999')).statusCode).toBe(400);
+    expect((await req('POST', '/entradas', { produto_id: ids.VT8, quantidade: 1e12 })).statusCode).toBe(400);
+    expect((await req('POST', '/entradas', { produto_id: ids.VT8, quantidade: 1, custo_unitario: 1e13 })).statusCode).toBe(400);
+    expect((await req('POST', '/saidas', { produto_id: ids.VT8, quantidade: 1e12 })).statusCode).toBe(400);
+    expect((await req('POST', '/acertos', { produto_id: ids.VT8, saldo_contado: 1e12 })).statusCode).toBe(400);
+    expect((await req('POST', '/entradas', { produto_id: 99999999999, quantidade: 1 })).statusCode).toBe(400);
+  });
 });

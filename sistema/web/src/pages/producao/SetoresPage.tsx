@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Alert, Badge, Input, Modal } from '../../components/ui';
 import { can, useAuth } from '../../lib/auth';
+import { lerNumero } from '../../lib/numero';
 import { producaoApi, type Setor, type SetorInput } from './api';
 import { CadastroLista } from './components/CadastroLista';
 import { useEnvio, useSetores } from './hooks';
 
-type Edicao = (SetorInput & { id?: number }) | null;
+/** Formulário do setor: a ordem fica como texto digitado e é convertida com lerNumero ao salvar. */
+type Edicao = (Omit<SetorInput, 'ordem'> & { id?: number; ordem: string }) | null;
 
 export function SetoresPage() {
   const { user } = useAuth();
@@ -17,7 +19,10 @@ export function SetoresPage() {
   const proximaOrdem = Math.max(0, ...(data ?? []).map((s) => s.ordem)) + 1;
   const salvar = async () => {
     if (!edicao) return;
-    const { id, ...s } = edicao;
+    const { id, ordem: ordemTexto, ...resto } = edicao;
+    const ordem = lerNumero(ordemTexto);
+    if (ordem === null || !Number.isInteger(ordem) || ordem < 0) return envio.setError('Informe a ordem no roteiro (número inteiro, zero ou mais).');
+    const s: SetorInput = { ...resto, ordem };
     const ok = await envio.run(() => (id ? producaoApi.atualizarSetor(id, s) : producaoApi.criarSetor(s)));
     if (ok) {
       setEdicao(null);
@@ -34,7 +39,7 @@ export function SetoresPage() {
     <CadastroLista<Setor>
       titulo="Setores de produção"
       podeEditar={admin}
-      onNovo={() => setEdicao({ nome: '', ordem: proximaOrdem, ativo: true })}
+      onNovo={() => setEdicao({ nome: '', ordem: String(proximaOrdem), ativo: true })}
       error={error || (!edicao ? envio.error : '')}
       rows={data}
       rowKey={(s) => s.id}
@@ -48,7 +53,7 @@ export function SetoresPage() {
           render: (s) =>
             admin && (
               <div className="actions" style={{ justifyContent: 'flex-end' }}>
-                <button className="btn small" onClick={() => setEdicao({ ...s })}>Editar</button>
+                <button className="btn small" onClick={() => setEdicao({ ...s, ordem: String(s.ordem) })}>Editar</button>
                 <button className="btn small danger" onClick={() => excluir(s)}>Excluir</button>
               </div>
             ),
@@ -66,7 +71,7 @@ export function SetoresPage() {
             <Alert>{envio.error}</Alert>
             <div className="grid">
               <Input label="Nome" className="col-8" autoFocus value={edicao.nome} onChange={(e) => setEdicao({ ...edicao, nome: e.target.value })} />
-              <Input label="Ordem no roteiro" className="col-4" type="number" min={0} value={edicao.ordem} onChange={(e) => setEdicao({ ...edicao, ordem: Number(e.target.value) })} />
+              <Input label="Ordem no roteiro" className="col-4" inputMode="numeric" value={edicao.ordem} onChange={(e) => setEdicao({ ...edicao, ordem: e.target.value })} />
               <label className="col-12" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input type="checkbox" checked={edicao.ativo} onChange={(e) => setEdicao({ ...edicao, ativo: e.target.checked })} /> Ativo
               </label>

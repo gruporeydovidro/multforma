@@ -15,8 +15,9 @@ const modulo: ModuleDef = {
     { label: 'Ordens de produção', path: 'producao/ordens', perfis: [...leitura] },
     { label: 'Painel por setor', path: 'producao/painel', perfis: [...leitura] },
     { label: 'Relatórios', path: 'producao/relatorios', perfis: [...leitura] },
-    { label: 'Setores', path: 'producao/setores', perfis: ['producao'] },
-    { label: 'Motivos de defeito', path: 'producao/motivos', perfis: ['producao'] },
+    // A API só aceita escrita do admin: o menu fica com ele; a tela continua acessível (só leitura) a quem lê a produção.
+    { label: 'Setores', path: 'producao/setores', perfis: ['admin'] },
+    { label: 'Motivos de defeito', path: 'producao/motivos', perfis: ['admin'] },
   ],
   routes: [
     { path: 'producao/ordens', element: <OrdensPage /> },
@@ -24,8 +25,8 @@ const modulo: ModuleDef = {
     { path: 'producao/ordens/:id/imprimir', element: <ImpressaoOrdemPage /> },
     { path: 'producao/painel', element: <PainelPage /> },
     { path: 'producao/relatorios', element: <RelatoriosPage /> },
-    { path: 'producao/setores', element: <SetoresPage /> },
-    { path: 'producao/motivos', element: <MotivosPage /> },
+    { path: 'producao/setores', element: <SetoresPage />, perfis: [...leitura] },
+    { path: 'producao/motivos', element: <MotivosPage />, perfis: [...leitura] },
   ],
 };
 

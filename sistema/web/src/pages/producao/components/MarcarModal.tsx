@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Input, Modal, Select, TextArea } from '../../../components/ui';
 import { producaoApi, type Motivo, type OrdemDetalhe } from '../api';
-import { medidas } from '../format';
+import { medidas, quantidade as qtd, saldoNoSetor } from '../format';
 import { marcacaoInicial, montarMarcacao, useEnvio, type MarcacaoForm } from '../hooks';
 
 export interface ItemParaMarcar {
@@ -11,9 +11,14 @@ export interface ItemParaMarcar {
   largura_mm: number | null;
   altura_mm: number | null;
   setor_atual_id: number | null;
+  /** Peças já processadas no setor atual. */
+  processado_setor: number;
 }
 
-/** Modal de marcação: setor, quantidade, defeito e motivo. */
+/**
+ * Modal de marcação: setor, quantidade, defeito e motivo. Mostra o já processado no setor e sugere o restante;
+ * o item só avança de setor quando todas as peças forem marcadas.
+ */
 export function MarcarModal({ ordemId, item, setores, motivos, defeito = false, onClose, onDone }: {
   ordemId: number;
   item: ItemParaMarcar | null;
@@ -24,6 +29,7 @@ export function MarcarModal({ ordemId, item, setores, motivos, defeito = false, 
   onDone: (ordem: OrdemDetalhe) => void;
 }) {
   const [form, setForm] = useState<MarcacaoForm>(() => marcacaoInicial({ setor_atual_id: null, quantidade: 1 }));
+  // useEnvio ignora cliques repetidos enquanto a marcação está sendo gravada.
   const envio = useEnvio();
 
   useEffect(() => {
@@ -34,9 +40,11 @@ export function MarcarModal({ ordemId, item, setores, motivos, defeito = false, 
 
   if (!item) return null;
   const set = (p: Partial<MarcacaoForm>) => setForm((f) => ({ ...f, ...p }));
+  const { processado, restante } = saldoNoSetor(item);
+  const setorAtual = setores.find((s) => s.id === item.setor_atual_id)?.nome ?? 'setor atual';
 
   const salvar = async () => {
-    const { erro, body } = montarMarcacao(form, item.quantidade);
+    const { erro, body } = montarMarcacao(form, item);
     if (erro) return envio.setError(erro);
     const ordem = await envio.run(() => producaoApi.marcar(ordemId, item.id, body!));
     if (ordem) onDone(ordem);
@@ -51,7 +59,7 @@ export function MarcarModal({ ordemId, item, setores, motivos, defeito = false, 
         <>
           <button className="btn" onClick={onClose}>Cancelar</button>
           <button className={`btn ${form.defeito ? 'danger' : 'primary'}`} disabled={envio.busy} onClick={salvar}>
-            {envio.busy ? 'Salvando…' : form.defeito ? 'Registrar defeito' : 'Marcar como concluída no setor'}
+            {envio.busy ? 'Salvando…' : form.defeito ? 'Registrar defeito' : 'Marcar no setor'}
           </button>
         </>
       }
@@ -59,6 +67,10 @@ export function MarcarModal({ ordemId, item, setores, motivos, defeito = false, 
       <p style={{ marginTop: 0 }}>
         <strong>{item.descricao}</strong> <span className="muted">— {medidas(item)} — {item.quantidade} peça(s)</span>
       </p>
+      <div className="stats">
+        <div className="stat"><div className="label">Já processadas em {setorAtual}</div><div className="value">{qtd(processado)} de {qtd(item.quantidade)}</div></div>
+        <div className="stat"><div className="label">Restante no setor</div><div className="value">{qtd(restante)}</div></div>
+      </div>
       <Alert>{envio.error}</Alert>
       <div className="grid">
         <Select label="Setor" className="col-8" value={form.setor_id} onChange={(e) => set({ setor_id: Number(e.target.value) || '' })}>
@@ -67,7 +79,14 @@ export function MarcarModal({ ordemId, item, setores, motivos, defeito = false, 
             <option key={s.id} value={s.id}>{s.nome}</option>
           ))}
         </Select>
-        <Input label="Quantidade" className="col-4" inputMode="decimal" value={form.quantidade} onChange={(e) => set({ quantidade: e.target.value })} />
+        <Input
+          label="Quantidade"
+          className="col-4"
+          inputMode="decimal"
+          value={form.quantidade}
+          onChange={(e) => set({ quantidade: e.target.value })}
+          hint={form.defeito ? 'Peças com defeito' : `Restante: ${qtd(restante)}`}
+        />
         <label className="col-12" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input type="checkbox" checked={form.defeito} onChange={(e) => set({ defeito: e.target.checked })} />
           Peça com defeito

@@ -57,6 +57,25 @@ export class MovimentoRepository {
     return r!.id;
   }
 
+  /**
+   * Bloqueio único dos escritores de estoque: serializa, até o fim da transação, toda leitura de saldo
+   * seguida de alteração do mesmo produto (em qualquer filial, pois o custo médio é global).
+   * Reentrante na mesma transação.
+   */
+  async travarProduto(produtoId: number): Promise<void> {
+    await query(`select pg_advisory_xact_lock(hashtext('estoque'), $1::int)`, [produtoId], this.db);
+  }
+
+  /** Saldo do produto somando todas as filiais (base do custo médio, que é global). */
+  async saldoTotal(produtoId: number): Promise<number> {
+    const r = await queryOne<{ saldo: number }>(
+      'select coalesce(sum(quantidade), 0) as saldo from estoque_movimento where produto_id = $1',
+      [produtoId],
+      this.db,
+    );
+    return r!.saldo;
+  }
+
   async saldo(filialId: number, produtoId: number): Promise<number> {
     const r = await queryOne<{ saldo: number }>(
       'select coalesce(sum(quantidade), 0) as saldo from estoque_movimento where filial_id = $1 and produto_id = $2',

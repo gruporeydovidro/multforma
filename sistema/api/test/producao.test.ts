@@ -5,19 +5,22 @@ import { login, useTestApp } from './helpers.js';
 
 let seqOrc = 100;
 
-/** Cria um orçamento direto por SQL com os produtos do seed (código, quantidade, largura, altura). */
-async function criarOrcamento(itens: [string, number, number | null, number | null][], opts: { status?: string; prazo?: string | null } = {}) {
+/**
+ * Cria um orçamento direto por SQL com os produtos do seed
+ * (código, quantidade, largura, altura e, opcionalmente, as medidas calculadas para cobrança).
+ */
+async function criarOrcamento(itens: [string, number, number | null, number | null, number?, number?][], opts: { status?: string; prazo?: string | null } = {}) {
   const orc = await queryOne<{ id: number }>(
     `insert into orcamento (filial_id, numero, cliente_id, status, prazo_entrega, fechado_em)
      values ((select min(id) from filial), $1, (select id from pessoa where nome = 'Consumidor Final'), $2, $3, now()) returning id`,
     [++seqOrc, opts.status ?? 'fechado', opts.prazo === undefined ? '2099-12-31' : opts.prazo],
   );
   let seq = 0;
-  for (const [codigo, qtd, larg, alt] of itens) {
+  for (const [codigo, qtd, larg, alt, largCalc, altCalc] of itens) {
     await query(
       `insert into orcamento_item (orcamento_id, seq, produto_id, descricao, unidade, quantidade, largura_mm, altura_mm, largura_calc_mm, altura_calc_mm)
-       select $1, $2, p.id, p.nome, p.unidade_venda, $3, $4, $5, $4, $5 from produto p where p.codigo = $6`,
-      [orc!.id, ++seq, qtd, larg, alt, codigo],
+       select $1, $2, p.id, p.nome, p.unidade_venda, $3, $4, $5, $7, $8 from produto p where p.codigo = $6`,
+      [orc!.id, ++seq, qtd, larg, alt, codigo, largCalc ?? larg, altCalc ?? alt],
     );
   }
   return orc!.id;
@@ -278,6 +281,135 @@ describe('produção', () => {
       expect((await req('PUT', `/motivos/${m.json().id}`, { descricao: 'Risco na peça' }, adm)).json().descricao).toBe('Risco na peça');
       expect((await req('DELETE', `/motivos/${m.json().id}`, undefined, adm)).statusCode).toBe(204);
       expect((await req('DELETE', `/motivos/${motivoId}`, undefined, adm)).statusCode).toBe(409);
+    });
+  });
+
+  // ----- regressões da revisão (no fim: os testes acima contam ordens e setores) -----
+  describe('regressões da revisão', () => {
+    const pendente = <T>(p: Promise<T>, ms = 300) => Promise.race([p.then(() => 'resolvida'), new Promise((r) => setTimeout(() => r('pendente'), ms))]);
+
+    it('a ordem usa a medida real de corte, não a arredondada de cobrança', async () => {
+      const orc = await criarOrcamento([['VT8', 1, 1013, 2001, 1050, 2050]]);
+      const o = (await req('POST', '/ordens', { orcamento_id: orc })).json();
+      expect(o.itens[0]).toMatchObject({ largura_mm: 1013, altura_mm: 2001 });
+      const service = new ProducaoService(repositoriosProducao);
+      const orc2 = await criarOrcamento([['VT10', 2, 733, 1499, 750, 1500]]);
+      const id = await withTx((db) => service.criarOrdemProducao(db, orc2));
+      expect(await queryOne('select largura_mm, altura_mm from ordem_producao_item where ordem_id = $1', [id])).toEqual({ largura_mm: 733, altura_mm: 1499 });
+    });
+
+    it('marcação parcial acumula por setor e só avança/conclui com o lote completo', async () => {
+      const orc = await criarOrcamento([['VT8', 10, 500, 500]]);
+      const ordem = (await req('POST', '/ordens', { orcamento_id: orc })).json();
+      const item = ordem.itens[0];
+      const marcar = (body: object) => req('POST', `/ordens/${ordem.id}/itens/${item.id}/marcar`, body);
+      const estado = (o: any) => {
+        const i = o.itens[0];
+        return [i.setor_atual_nome, i.status, i.processado_setor];
+      };
+
+      let res = await marcar({ setor_id: setores['Corte'], quantidade: 1 });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().status).toBe('em_producao');
+      expect(estado(res.json())).toEqual(['Corte', 'em_producao', 1]);
+      res = await marcar({ setor_id: setores['Corte'], quantidade: 10 });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toMatch(/restante no setor \(9/);
+      expect(estado((await marcar({ setor_id: setores['Corte'], quantidade: 9 })).json())).toEqual(['Lapidação', 'em_producao', 0]);
+
+      expect(estado((await marcar({ setor_id: setores['Lapidação'], quantidade: 4 })).json())).toEqual(['Lapidação', 'em_producao', 4]);
+      res = await marcar({ setor_id: setores['Lapidação'], quantidade: 2, defeito: true, motivo_id: motivoId });
+      expect(res.json().itens[0]).toMatchObject({ status: 'defeito', defeitos: 1 });
+      expect(res.json().marcacoes[0]).toMatchObject({ setor_nome: 'Lapidação', quantidade: 2, defeito: true, motivo: 'Quebra na têmpera' });
+
+      // refazer volta ao primeiro setor e zera o acúmulo (as marcações anteriores no Corte não contam)
+      res = await req('POST', `/ordens/${ordem.id}/itens/${item.id}/refazer`);
+      expect(estado(res.json())).toEqual(['Corte', 'pendente', 0]);
+      res = await marcar({ setor_id: setores['Corte'] }); // sem quantidade: o restante do setor
+      expect(res.json().marcacoes[0]).toMatchObject({ setor_nome: 'Corte', quantidade: 10 });
+      expect(estado(res.json())).toEqual(['Lapidação', 'em_producao', 0]); // as 4 de antes do defeito não contam
+
+      await marcar({ setor_id: setores['Lapidação'] });
+      await marcar({ setor_id: setores['Têmpera'] });
+      res = await marcar({ setor_id: setores['Expedição'], quantidade: 5 });
+      expect(res.json().status).toBe('em_producao');
+      expect(estado(res.json())).toEqual(['Expedição', 'em_producao', 5]);
+      expect((await marcar({ setor_id: setores['Expedição'], quantidade: 6 })).statusCode).toBe(400);
+      res = await marcar({ setor_id: setores['Expedição'], quantidade: 5 });
+      expect(res.json()).toMatchObject({ status: 'concluida', itens_concluidos: 1 });
+      expect(res.json().itens[0]).toMatchObject({ status: 'concluido', setor_atual_id: null });
+    });
+
+    it('o painel mostra o acumulado do setor', async () => {
+      const orc = await criarOrcamento([['VC4', 3, 400, 400]]);
+      const ordem = (await req('POST', '/ordens', { orcamento_id: orc })).json();
+      await req('POST', `/ordens/${ordem.id}/itens/${ordem.itens[0].id}/marcar`, { setor_id: setores['Corte'], quantidade: 2 });
+      const corte = (await req('GET', '/painel')).json().setores.find((s: any) => s.nome === 'Corte');
+      expect(corte.itens.find((i: any) => i.item_id === ordem.itens[0].id)).toMatchObject({ quantidade: 3, processado_setor: 2 });
+    });
+
+    it('409 ao criar ordem sem setor ativo (tela e porta), sem gravar itens sem setor', async () => {
+      const ativos = (await query<{ id: number }>('select id from setor_producao where ativo')).map((r) => r.id);
+      const orc = await criarOrcamento([['VT8', 1, 500, 500]]);
+      try {
+        await query('update setor_producao set ativo = false');
+        const res = await req('POST', '/ordens', { orcamento_id: orc });
+        expect(res.statusCode).toBe(409);
+        expect(res.json().error).toMatch(/Nenhum setor de produção ativo/);
+        const service = new ProducaoService(repositoriosProducao);
+        await expect(withTx((db) => service.criarOrdemProducao(db, orc))).rejects.toMatchObject({ status: 409 });
+        expect(await queryOne('select 1 from ordem_producao where orcamento_id = $1', [orc])).toBeUndefined();
+      } finally {
+        await query('update setor_producao set ativo = true where id = any($1)', [ativos]);
+      }
+      expect((await queryOne<{ n: number }>('select count(*)::int as n from ordem_producao_item where setor_atual_id is null and status <> $1', ['concluido']))!.n).toBe(0);
+      expect((await req('POST', '/ordens', { orcamento_id: orc })).statusCode).toBe(201);
+    });
+
+    it('geração concorrente do mesmo orçamento: uma cria, a outra recebe 409', async () => {
+      const orc = await criarOrcamento([['VT8', 1, 500, 500]]);
+      const [a, b] = await Promise.all([req('POST', '/ordens', { orcamento_id: orc }), req('POST', '/ordens', { orcamento_id: orc })]);
+      expect([a.statusCode, b.statusCode].sort()).toEqual([201, 409]);
+      expect((await queryOne<{ n: number }>('select count(*)::int as n from ordem_producao where orcamento_id = $1', [orc]))!.n).toBe(1);
+    });
+
+    it('serializa pelo advisory lock da produção, sem travar a linha do orçamento', async () => {
+      const orc = await criarOrcamento([['VT8', 1, 500, 500]]);
+      const client = await getPool().connect();
+      try {
+        // Orçamentos alterando o orçamento (no key update): a geração não pode esperar por isso.
+        await client.query('begin');
+        await client.query(`update orcamento set observacoes = 'editando' where id = $1`, [orc]);
+        const livre = req('POST', '/ordens', { orcamento_id: orc });
+        expect(await pendente(livre, 1500)).toBe('resolvida');
+        expect((await livre).statusCode).toBe(201);
+        await client.query('rollback');
+
+        // Outra geração do mesmo orçamento em andamento: espera o advisory lock.
+        const orc2 = await criarOrcamento([['VT8', 1, 500, 500]]);
+        await client.query('begin');
+        await client.query(`select pg_advisory_xact_lock(hashtext('ordem_producao'), $1)`, [orc2]);
+        const bloqueada = req('POST', '/ordens', { orcamento_id: orc2 });
+        expect(await pendente(bloqueada)).toBe('pendente');
+        await client.query('commit');
+        expect((await bloqueada).statusCode).toBe(201);
+      } finally {
+        await client.query('rollback').catch(() => undefined);
+        client.release();
+      }
+    });
+
+    it('schemas: data inválida e valores acima do limite dão 400', async () => {
+      const orc = await criarOrcamento([['VT8', 1, 500, 500]]);
+      const ordem = (await req('POST', '/ordens', { orcamento_id: orc })).json();
+      expect((await req('GET', '/relatorios/defeitos?de=2026-02-30')).statusCode).toBe(400);
+      expect((await req('GET', '/relatorios/producao-setor?ate=2026-13-01')).statusCode).toBe(400);
+      expect((await req('GET', '/ordens?de=2026-02-31')).statusCode).toBe(400);
+      expect((await req('PUT', `/ordens/${ordem.id}`, { previsao_entrega: '2026-02-30' })).statusCode).toBe(400);
+      expect((await req('GET', '/ordens/99999999999')).statusCode).toBe(400);
+      expect((await req('POST', '/ordens', { orcamento_id: 99999999999 })).statusCode).toBe(400);
+      expect((await req('POST', `/ordens/${ordem.id}/itens/${ordem.itens[0].id}/marcar`, { setor_id: setores['Corte'], quantidade: 1e12 })).statusCode).toBe(400);
+      expect((await req('POST', '/setores', { nome: 'Grande', ordem: 1e12 }, t.cookie)).statusCode).toBe(400);
     });
   });
 });

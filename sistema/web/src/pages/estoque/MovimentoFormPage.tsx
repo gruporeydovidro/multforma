@@ -4,8 +4,10 @@ import { Alert, Card, Input, PageHeader, TextArea } from '../../components/ui';
 import { money } from '../../lib/format';
 import { estoqueApi, type ResultadoMovimento } from './api';
 import { ProdutoSelect } from './components/ProdutoSelect';
-import { numero, previaCustoMedio, qtd } from './format';
-import { useEnvio, useSaldoProduto } from './hooks';
+import { lerNumero } from '../../lib/numero';
+import { useEnvio } from '../../lib/useEnvio';
+import { previaCustoMedio, qtd } from './format';
+import { useSaldoProduto } from './hooks';
 import { formVazio, montarRequisicao, TITULOS, type ModoMovimento, type MovimentoForm } from './movimento-form';
 
 function enviar(r: Exclude<ReturnType<typeof montarRequisicao>, { erro: string }>): Promise<ResultadoMovimento> {
@@ -24,9 +26,9 @@ export function MovimentoFormPage({ modo }: { modo: ModoMovimento }) {
   const t = TITULOS[modo];
   const set = (patch: Partial<MovimentoForm>) => setForm((f) => ({ ...f, ...patch }));
 
-  const quantidade = numero(form.quantidade);
-  const custo = numero(form.custo_unitario);
-  const contado = numero(form.saldo_contado);
+  const quantidade = lerNumero(form.quantidade);
+  const custo = lerNumero(form.custo_unitario);
+  const contado = lerNumero(form.saldo_contado);
 
   const salvar = async () => {
     setSucesso('');

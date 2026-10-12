@@ -82,6 +82,49 @@ describe('ItemProducao', () => {
   });
 });
 
+describe('ItemProducao: marcação parcial (acúmulo por setor)', () => {
+  it('acumula as marcações sem defeito e só avança quando completa o lote', () => {
+    const item = new ItemProducao(1, 10, 10, 'pendente');
+    const m = item.marcar({ setorId: 10, quantidade: 1 }, roteiro);
+    expect(m).toMatchObject({ quantidade: 1, avancou: false });
+    expect(item).toMatchObject({ setorAtualId: 10, status: 'em_producao', processadoNoSetor: 1, restanteNoSetor: 9 });
+    item.marcar({ setorId: 10, quantidade: 4 }, roteiro);
+    expect(item.restanteNoSetor).toBe(5);
+    expect(erro(() => item.marcar({ setorId: 10, quantidade: 6 }, roteiro)).message).toMatch(/restante no setor \(5/);
+    expect(item.processadoNoSetor).toBe(5);
+    expect(item.marcar({ setorId: 10, quantidade: 5 }, roteiro).avancou).toBe(true);
+    expect(item).toMatchObject({ setorAtualId: 30, status: 'em_producao', processadoNoSetor: 0, restanteNoSetor: 10 });
+  });
+
+  it('sem quantidade, marca o restante do setor; no último setor só conclui com o lote completo', () => {
+    const item = new ItemProducao(1, 10, 40, 'em_producao', 7);
+    expect(erro(() => item.marcar({ setorId: 40, quantidade: 4 }, roteiro)).tipo).toBe('invalido');
+    expect(item.marcar({ setorId: 40 }, roteiro)).toMatchObject({ quantidade: 3, avancou: true });
+    expect(item.status).toBe('concluido');
+    const parcial = new ItemProducao(2, 10, 40, 'em_producao');
+    parcial.marcar({ setorId: 40, quantidade: 1 }, roteiro);
+    expect(parcial.status).toBe('em_producao');
+    expect(parcial.concluido).toBe(false);
+  });
+
+  it('aceita quantidades fracionárias sem erro de ponto flutuante', () => {
+    const item = new ItemProducao(1, 0.3, 10, 'pendente');
+    item.marcar({ setorId: 10, quantidade: 0.1 }, roteiro);
+    item.marcar({ setorId: 10, quantidade: 0.2 }, roteiro);
+    expect(item.setorAtualId).toBe(30);
+  });
+
+  it('defeito registra a quantidade defeituosa e refazer zera o acúmulo', () => {
+    const item = new ItemProducao(1, 10, 30, 'em_producao', 4);
+    expect(erro(() => item.marcar({ setorId: 30, quantidade: 11, defeito: true, motivoId: 2 }, roteiro)).message).toMatch(/Quantidade maior/);
+    const m = item.marcar({ setorId: 30, quantidade: 3, defeito: true, motivoId: 2 }, roteiro);
+    expect(m).toMatchObject({ quantidade: 3, defeito: true, motivoId: 2, avancou: false });
+    expect(item.status).toBe('defeito');
+    item.refazer(roteiro);
+    expect(item).toMatchObject({ setorAtualId: 10, status: 'pendente', processadoNoSetor: 0, restanteNoSetor: 10 });
+  });
+});
+
 describe('OrdemProducao', () => {
   const nova = () => new OrdemProducao(7, 'aguardando', [new ItemProducao(1, 1, 10, 'pendente'), new ItemProducao(2, 1, 40, 'em_producao')]);
 
@@ -110,6 +153,17 @@ describe('OrdemProducao', () => {
     expect(erro(() => o.cancelar()).message).toMatch(/já cancelada/);
   });
 
+  it('marcação parcial no último setor não conclui a ordem', () => {
+    const o = new OrdemProducao(1, 'em_producao', [new ItemProducao(1, 10, 40, 'em_producao'), new ItemProducao(2, 1, null, 'concluido')]);
+    o.marcarItem(1, { setorId: 40, quantidade: 1 }, roteiro);
+    expect(o.status).toBe('em_producao');
+    o.marcarItem(1, { setorId: 40, quantidade: 8 }, roteiro);
+    expect(o.status).toBe('em_producao');
+    o.marcarItem(1, { setorId: 40, quantidade: 1 }, roteiro);
+    expect(o.status).toBe('concluida');
+    expect(o.eventos.concluiu).toBe(true);
+  });
+
   it('defeito não conclui a ordem', () => {
     const o = new OrdemProducao(1, 'em_producao', [new ItemProducao(1, 1, 40, 'em_producao')]);
     o.marcarItem(1, { setorId: 40, defeito: true, motivoId: 1 }, roteiro);
@@ -129,6 +183,15 @@ describe('planejamento, painel e período', () => {
     );
     expect(itens).toHaveLength(1);
     expect(itens[0].setor_atual_id).toBe(10);
+  });
+
+  it('sem setor ativo, recusa planejar (conflito) em vez de criar itens sem setor', () => {
+    const semSetor = new RoteiroProducao([{ id: 10, nome: 'Corte', ordem: 1, ativo: false }]);
+    const item = { orcamento_item_id: 1, produto_id: 1, descricao: 'Vidro', quantidade: 1, largura_mm: 500, altura_mm: 900 };
+    const e = erro(() => planejarItens([item], semSetor));
+    expect(e.tipo).toBe('conflito');
+    expect(e.message).toMatch(/Nenhum setor de produção ativo/);
+    expect(planejarItens([{ ...item, quantidade: 0 }], semSetor)).toEqual([]);
   });
 
   it('agrupa o painel por setor', () => {

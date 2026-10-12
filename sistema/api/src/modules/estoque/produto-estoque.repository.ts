@@ -39,19 +39,11 @@ const SALDOS = `
 
 /**
  * Leitura dos dados de produto usados pelo estoque. O produto pertence a Cadastros: a gravação
- * do custo médio passa pela CatalogoPort.
+ * do custo médio passa pela CatalogoPort, e a serialização usa o bloqueio do próprio estoque
+ * (MovimentoRepository.travarProduto), nunca um `for update` na tabela produto.
  */
 export class ProdutoEstoqueRepository {
   constructor(private readonly db: Db) {}
-
-  /** Lê o produto travando a linha, para serializar movimentos concorrentes do mesmo produto. */
-  travar(id: number): Promise<ProdutoEstoque | undefined> {
-    return queryOne<ProdutoEstoque>(
-      'select id, codigo, nome, unidade_venda, controla_estoque, ativo, custo, estoque_minimo from produto where id = $1 for update',
-      [id],
-      this.db,
-    );
-  }
 
   buscar(id: number): Promise<ProdutoEstoque | undefined> {
     return queryOne<ProdutoEstoque>(

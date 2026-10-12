@@ -48,7 +48,8 @@ export class OrdemProducaoService {
   gerar(op: Operador, orcamentoId: number) {
     return withTx(async (db) => {
       const r = this.repos(db);
-      const orc = await r.orcamentos.travarDaFilial(op.filialId, orcamentoId);
+      await r.orcamentos.travarGeracaoDeOrdem(orcamentoId);
+      const orc = await r.orcamentos.buscarDaFilial(op.filialId, orcamentoId);
       if (!orc) throw notFound('Orçamento');
       if (orc.status !== 'fechado') throw conflict('Só orçamentos fechados podem ir para a produção');
       const ativa = await r.ordens.ativaDoOrcamento(orcamentoId);

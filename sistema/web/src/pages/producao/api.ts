@@ -53,6 +53,8 @@ export interface ItemOrdem {
   setor_atual_id: number | null;
   setor_atual_nome: string | null;
   defeitos: number;
+  /** Peças já processadas (sem defeito) no setor atual; o item avança quando chega à quantidade. */
+  processado_setor: number;
 }
 
 export interface MarcacaoHistorico {
@@ -123,6 +125,7 @@ export interface ItemPainel {
   setor_atual_nome: string | null;
   previsao_entrega: string | null;
   atrasada: boolean;
+  processado_setor: number;
 }
 
 export interface SetorPainel {

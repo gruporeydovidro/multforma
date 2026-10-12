@@ -7,10 +7,10 @@ const buscar = async (q: string): Promise<Option[]> =>
 /** Seleção de produto (ativo) pelo código ou nome. */
 export function ProdutoSelect({ value, onChange, initialLabel, className, label = 'Produto' }: {
   value: number | null;
-  onChange: (id: number | null) => void;
+  onChange: (id: number | null, option?: Option) => void;
   initialLabel?: string;
   className?: string;
   label?: string;
 }) {
-  return <AsyncSelect label={label} value={value} onChange={(v) => onChange(v)} fetchOptions={buscar} initialLabel={initialLabel} className={className} placeholder="Código ou nome do produto" />;
+  return <AsyncSelect label={label} value={value} onChange={onChange} fetchOptions={buscar} initialLabel={initialLabel} className={className} placeholder="Código ou nome do produto" />;
 }

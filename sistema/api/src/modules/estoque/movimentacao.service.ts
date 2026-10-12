@@ -50,7 +50,8 @@ export class MovimentacaoService {
       const r = this.repos(db);
       const produto = await this.produtoMovimentavel(r, e.produto_id);
       if (e.custo_unitario != null) {
-        const saldo = await this.estoque.saldo(db, op.filialId, produto.id);
+        // O custo do produto é global: pondera pelo saldo de todas as filiais.
+        const saldo = await r.movimentos.saldoTotal(produto.id);
         const novo = regra(() => new CustoMedio(saldo, produto.custo).aplicarEntrada(e.quantidade, e.custo_unitario!));
         await this.catalogo.atualizarCusto(db, produto.id, novo.custo);
       }
@@ -117,8 +118,13 @@ export class MovimentacaoService {
     });
   }
 
+  /**
+   * Adquire o bloqueio do produto (o mesmo da porta registrarMovimento, usada pela venda) antes de
+   * qualquer leitura de saldo, e valida se o produto pode ser movimentado.
+   */
   private async produtoMovimentavel(r: RepositoriosEstoque, produtoId: number): Promise<ProdutoEstoque> {
-    const produto = await r.produtos.travar(produtoId);
+    await r.movimentos.travarProduto(produtoId);
+    const produto = await r.produtos.buscar(produtoId);
     if (!produto) throw notFound('Produto');
     if (!produto.controla_estoque) throw badRequest('O produto não controla estoque');
     if (!produto.ativo) throw badRequest('O produto está inativo');
