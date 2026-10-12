@@ -1,18 +1,53 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { can, useAuth } from '../../lib/auth';
 import { useAsync } from '../../lib/useAsync';
-import { apoioApi, orcamentosApi, type Cabecalho, type FechamentoInput, type FiltroOrcamentos, type ItemInput, type Opcao, type Orcamento, type ProjetoInput } from './api';
+import { useFiltroUrl } from '../../lib/useFiltroUrl';
+import { apoioApi, orcamentosApi, type Cabecalho, type FechamentoInput, type ItemInput, type Opcao, type Orcamento, type ProjetoInput, type StatusOrcamento } from './api';
+import { permissoesOrcamento, type PermissoesOrcamento } from './regras';
 
 import { useEnvio } from '../../lib/useEnvio';
 
 export { useEnvio };
 
-/** Lista de orçamentos com filtros e paginação. */
+const FILTRO_PADRAO = { q: '', status: '', data_ini: '', data_fim: '', vendedor_id: '' };
+const POR_PAGINA = 30;
+
+/** Lista de orçamentos; filtros e página ficam na URL (voltar do detalhe preserva o filtro). */
 export function useOrcamentos() {
-  const [filtro, setFiltroState] = useState<FiltroOrcamentos>({ page: 1, pageSize: 30 });
-  const lista = useAsync(() => orcamentosApi.listar(filtro), [JSON.stringify(filtro)]);
-  const setFiltro = (f: Partial<FiltroOrcamentos>) => setFiltroState((a) => ({ ...a, page: 1, ...f }));
-  const setPage = (page: number) => setFiltroState((a) => ({ ...a, page }));
-  return { filtro, setFiltro, setPage, ...lista };
+  const { filtros, pagina, definir } = useFiltroUrl(FILTRO_PADRAO);
+  const lista = useAsync(
+    () => orcamentosApi.listar({ ...filtros, status: filtros.status as StatusOrcamento | '', page: pagina, pageSize: POR_PAGINA }),
+    [JSON.stringify(filtros), pagina],
+  );
+  const setFiltro = (f: Partial<typeof FILTRO_PADRAO>) => definir(f);
+  const setPage = (page: number) => definir({ page });
+  return { filtro: filtros, setFiltro, setPage, ...lista };
+}
+
+/** Estado de navegação levado da lista ao detalhe: a query string com os filtros. */
+interface EstadoLista {
+  lista?: string;
+}
+
+/** Abre um orçamento levando os filtros da lista; `voltar` retorna à lista com eles. */
+export function useNavegacaoOrcamentos() {
+  const nav = useNavigate();
+  const loc = useLocation();
+  const lista = (loc.state as EstadoLista | null)?.lista ?? (loc.pathname === '/orcamentos' ? loc.search : '');
+  return {
+    abrir: (id: number | 'novo') => nav(`/orcamentos/${id}`, { state: { lista } satisfies EstadoLista }),
+    voltar: () => nav(`/orcamentos${lista}`),
+    imprimir: (id: number) => nav(`/orcamentos/${id}/imprimir`, { state: { lista } satisfies EstadoLista }),
+    nav,
+    estado: { lista } satisfies EstadoLista,
+  };
+}
+
+/** Permissões do usuário logado para um orçamento (null = novo). Fonte única para a tela. */
+export function usePermissoesOrcamento(status: StatusOrcamento | null): PermissoesOrcamento {
+  const { user } = useAuth();
+  return permissoesOrcamento(can(user, 'vendedor'), status);
 }
 
 /** Listas de apoio (vendedores, tabelas de preço, projetos). Falhas resultam em listas vazias. */

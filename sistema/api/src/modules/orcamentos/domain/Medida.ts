@@ -2,8 +2,6 @@ import { RegraOrcamentoError } from './erros.js';
 
 /** Arredondamento do produto: cada dimensão sobe ao múltiplo de valor_cm (em mm: valor_cm * 10). */
 export class Arredondamento {
-  static readonly NENHUM = new Arredondamento(null);
-
   constructor(readonly valorCm: number | null) {}
 
   get passoMm(): number | null {

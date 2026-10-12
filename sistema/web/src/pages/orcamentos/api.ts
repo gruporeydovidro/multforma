@@ -168,7 +168,8 @@ export interface FiltroOrcamentos {
   status?: StatusOrcamento | '';
   data_ini?: string;
   data_fim?: string;
-  vendedor_id?: number | '';
+  /** Id do vendedor (texto da URL) ou vazio. */
+  vendedor_id?: number | string;
   page?: number;
   pageSize?: number;
 }
@@ -206,11 +207,11 @@ export const orcamentosApi = {
   duplicar: (id: number) => api.post<Orcamento>(`${base}/${id}/duplicar`),
 };
 
-/** Consultas de apoio (endpoints de Cadastros e Projetos), já no formato das telas. */
+/** Consultas de apoio (endpoints de Cadastros e Projetos), já no formato das telas. Só registros ativos. */
 export const apoioApi = {
   buscarClientes: async (q: string): Promise<Option[]> => {
     const r = await api.get<Paged<{ id: number; nome: string; fantasia: string | null; cpf_cnpj: string | null; cidade: string | null }>>(
-      `/cadastros/pessoas${qs({ q, tipo: 'cliente', pageSize: 20 })}`,
+      `/cadastros/pessoas${qs({ q, tipo: 'cliente', ativo: true, pageSize: 20 })}`,
     );
     return r.items.map((p) => ({ value: p.id, label: [p.nome, p.cpf_cnpj, p.cidade].filter(Boolean).join(' · ') }));
   },
@@ -220,7 +221,11 @@ export const apoioApi = {
     );
     return r.items.map((p) => ({ value: p.id, label: `${p.codigo} - ${p.nome}`, unidade_venda: p.unidade_venda, preco_venda: p.preco_venda }));
   },
-  vendedores: async (): Promise<Opcao[]> => (await api.get<Paged<Opcao>>(`/cadastros/funcionarios${qs({ vendedor: true, pageSize: 200 })}`)).items,
-  tabelasPreco: async (): Promise<Opcao[]> => (await api.get<{ items: (Opcao & { ativo: boolean })[] }>('/cadastros/tabelas-preco')).items,
+  vendedores: async (): Promise<Opcao[]> =>
+    (await api.get<Paged<Opcao>>(`/cadastros/funcionarios${qs({ vendedor: true, ativo: true, pageSize: 200 })}`)).items,
+  tabelasPreco: async (): Promise<Opcao[]> =>
+    (await api.get<{ items: (Opcao & { ativo: boolean })[] }>(`/cadastros/tabelas-preco${qs({ ativo: true, pageSize: 200 })}`)).items
+      .filter((t) => t.ativo !== false)
+      .map(({ id, nome }) => ({ id, nome })),
   projetos: async (): Promise<Opcao[]> => (await api.get<Paged<Opcao>>(`/projetos${qs({ ativo: true, pageSize: 200 })}`)).items,
 };

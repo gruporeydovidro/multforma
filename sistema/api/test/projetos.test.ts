@@ -102,6 +102,33 @@ describe('projetos', () => {
     expect((await req('POST', `/999999/simular`, { largura_vao_mm: 10, altura_vao_mm: 10 })).statusCode).toBe(404);
   });
 
+  it('schemas: medidas, folgas, quantidades e ids fora do limite dão 400 (regressão)', async () => {
+    const item = { descricao: 'Folha', tipo: 'vidro', formula_largura: 'L', formula_altura: 'A' };
+    const casos: unknown[] = [
+      { ...novoProjeto(), itens: [{ ...item, folga_largura_mm: 3_000_000_000 }] },
+      { ...novoProjeto(), itens: [{ ...item, folga_altura_mm: 1.5 }] },
+      { ...novoProjeto(), itens: [{ ...item, quantidade: 1e8 }] },
+      { ...novoProjeto(), itens: [{ ...item, quantidade: 0 }] },
+      { ...novoProjeto(), itens: [{ descricao: 'Kit', tipo: 'ferragem', produto_id: 3_000_000_000 }] },
+    ];
+    for (const body of casos) expect((await req('POST', '/', body)).statusCode, JSON.stringify(body)).toBe(400);
+    const vaos: unknown[] = [
+      { largura_vao_mm: 3_000_000_000, altura_vao_mm: 1900, vidro_produto_id: vt8 },
+      { largura_vao_mm: 1500.5, altura_vao_mm: 1900, vidro_produto_id: vt8 },
+      { largura_vao_mm: 1500, altura_vao_mm: 1900, quantidade: 1e9, vidro_produto_id: vt8 },
+      { largura_vao_mm: 1500, altura_vao_mm: 1900, vidro_produto_id: 3_000_000_000 },
+    ];
+    for (const body of vaos) expect((await req('POST', `/${boxId}/simular`, body)).statusCode, JSON.stringify(body)).toBe(400);
+    expect((await req('GET', '/99999999999')).statusCode).toBe(400);
+  });
+
+  it('projeto inativo ainda pode ser simulado (a inclusão em orçamento é que o recusa)', async () => {
+    const criado = (await req('POST', '/', { ...novoProjeto(), ativo: false }, cookieVendedor)).json();
+    const res = await req('POST', `/${criado.id}/simular`, { largura_vao_mm: 1000, altura_vao_mm: 1000, vidro_produto_id: vt8 });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().pecas).toHaveLength(2);
+  });
+
   it('perfil produção lê mas não escreve (403)', async () => {
     expect((await req('GET', '/', undefined, cookieProducao)).statusCode).toBe(200);
     expect((await req('POST', '/', novoProjeto(), cookieProducao)).statusCode).toBe(403);

@@ -204,19 +204,3 @@ export class Formula {
     return v;
   }
 }
-
-/** Fachada de uso simples. */
-export const AvaliadorFormula = {
-  avaliar(texto: string, vars: VariaveisFormula): number {
-    return Formula.compilar(texto).avaliar(vars);
-  },
-  /** Devolve a mensagem de erro, ou null se a fórmula for válida. */
-  validar(texto: string): string | null {
-    try {
-      Formula.compilar(texto);
-      return null;
-    } catch (e) {
-      return (e as Error).message;
-    }
-  },
-};

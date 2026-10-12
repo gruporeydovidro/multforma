@@ -17,7 +17,7 @@ import {
 
 /** Orçamentos (vendas): escrita para vendedor; leitura também para financeiro. Adaptador HTTP fino. */
 export default async function orcamentosRoutes(app: FastifyInstance, opts: ModuloOptions) {
-  const service = new OrcamentoService(opts.ports, opts.ports.projetos);
+  const service = new OrcamentoService(opts.ports);
   const leitura = { preHandler: requirePerfil('vendedor', 'financeiro') };
   const escrita = { preHandler: requirePerfil('vendedor') };
 

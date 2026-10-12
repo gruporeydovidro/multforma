@@ -15,6 +15,14 @@ export interface AjustesOrcamento {
   frete_valor?: number | null;
 }
 
+export interface Desconto {
+  desconto_pct: number;
+  desconto_valor: number;
+}
+
+/** Limite das colunas de valor do cabeçalho (numeric(14,2)). */
+export const LIMITE_VALOR_ORCAMENTO = 999_999_999_999;
+
 export interface Totais {
   subtotal: number;
   /** Desconto geral efetivamente aplicado (R$). */
@@ -52,7 +60,31 @@ export class Orcamento {
     return { subtotal, desconto, total };
   }
 
-  /** Valor a gravar em desconto_valor: com %, o desconto efetivo; sem %, o valor digitado. */
+  /**
+   * Intenção de desconto de uma edição parcial do cabeçalho. Os dois modos são exclusivos:
+   * - % (desconto_pct > 0): desconto_valor é derivado (o efetivo, regravado a cada recálculo);
+   * - R$ (desconto_pct = 0): desconto_valor é o digitado.
+   * Mudar o % sem informar o valor descarta o valor derivado do % anterior (pct 0 = sem desconto).
+   * Informar só um valor positivo passa ao modo R$; só um valor zero não desliga um % ativo. Sem nenhum dos dois, nada muda.
+   */
+  static resolverDesconto(atual: Desconto, alteracao: AjustesOrcamento): Desconto {
+    const informado = (v: number | null | undefined): v is number => v !== undefined && v !== null;
+    const pctAtual = Number(atual.desconto_pct ?? 0);
+    const valorAtual = Number(atual.desconto_valor ?? 0);
+    const { desconto_pct: pct, desconto_valor: valor } = alteracao;
+    if (informado(pct) && informado(valor)) return { desconto_pct: Number(pct), desconto_valor: round2(Number(valor)) };
+    if (informado(pct)) return { desconto_pct: Number(pct), desconto_valor: Number(pct) === pctAtual ? valorAtual : 0 };
+    // Só o valor: positivo passa ao modo R$; zero zera o desconto em R$ (com % ativo, o % continua valendo).
+    if (informado(valor) && (Number(valor) > 0 || pctAtual === 0)) return { desconto_pct: 0, desconto_valor: round2(Number(valor)) };
+    return { desconto_pct: pctAtual, desconto_valor: valorAtual };
+  }
+
+  /** Os totais precisam caber nas colunas do cabeçalho. */
+  static garantirLimites(t: Totais): void {
+    if (t.subtotal > LIMITE_VALOR_ORCAMENTO || t.total > LIMITE_VALOR_ORCAMENTO) throw new RegraOrcamentoError('Total do orçamento acima do limite');
+  }
+
+  /** Valor a gravar em desconto_valor: com %, o desconto efetivo (derivado); sem %, o valor digitado. */
   static descontoAGravar(a: AjustesOrcamento, t: Totais): number {
     return Number(a.desconto_pct ?? 0) > 0 ? t.desconto : round2(Number(a.desconto_valor ?? 0));
   }

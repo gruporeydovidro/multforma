@@ -26,7 +26,16 @@ function inicial(o?: Orcamento): Form {
 }
 
 const idOuNull = (v: string) => (v ? Number(v) : null);
-const textoOuNull = (v: string) => (v.trim() ? v : null);
+/** Aplicado só ao enviar: durante a digitação o texto fica como está (inclusive espaços). */
+const textoOuNull = (v: string | null) => (v?.trim() ? v.trim() : null);
+
+/** Lista de apoio com a opção gravada, mesmo que tenha sido desativada depois. */
+function comAtual(lista: Opcao[], id: number | null | undefined, nome: string | null | undefined): Opcao[] {
+  if (!id || lista.some((x) => x.id === id)) return lista;
+  return [...lista, { id, nome: `${nome ?? `#${id}`} (inativo)` }];
+}
+
+export const MSG_CLIENTE_OBRIGATORIO = 'Selecione o cliente: digite parte do nome e escolha uma opção da lista.';
 
 /**
  * Cabeçalho do orçamento: cliente, vendedor, tabela de preço, datas, destino e observações.
@@ -39,7 +48,7 @@ export function CabecalhoForm({ orcamento, vendedores, tabelas, editavel, financ
   editavel: boolean;
   financeiroEditavel: boolean;
   busy: boolean;
-  onSalvar: (dados: DadosCabecalho) => void;
+  onSalvar: (dados: DadosCabecalho) => unknown;
   rotuloSalvar?: string;
 }) {
   const [f, setF] = useState<Form>(() => inicial(orcamento));
@@ -50,10 +59,18 @@ export function CabecalhoForm({ orcamento, vendedores, tabelas, editavel, financ
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((a) => ({ ...a, [k]: v }));
 
   const salvar = () => {
-    if (!f.cliente_id) return setErro('Selecione o cliente');
+    if (!f.cliente_id) return setErro(MSG_CLIENTE_OBRIGATORIO);
     setErro('');
-    onSalvar({ ...f, cliente_id: f.cliente_id });
+    onSalvar({
+      ...f,
+      cliente_id: f.cliente_id,
+      contato: textoOuNull(f.contato),
+      endereco_entrega: textoOuNull(f.endereco_entrega),
+      observacoes: textoOuNull(f.observacoes),
+    });
   };
+  const listaVendedores = comAtual(vendedores, orcamento?.vendedor_id, orcamento?.vendedor_nome);
+  const listaTabelas = comAtual(tabelas, orcamento?.tabela_preco_id, orcamento?.tabela_preco_nome);
 
   return (
     <>
@@ -65,7 +82,10 @@ export function CabecalhoForm({ orcamento, vendedores, tabelas, editavel, financ
             value={f.cliente_id}
             initialLabel={orcamento?.cliente?.nome}
             fetchOptions={apoioApi.buscarClientes}
-            onChange={(v) => set('cliente_id', v)}
+            onChange={(v) => {
+              set('cliente_id', v);
+              if (v) setErro('');
+            }}
             error={erro}
           />
         ) : (
@@ -73,12 +93,12 @@ export function CabecalhoForm({ orcamento, vendedores, tabelas, editavel, financ
         )}
         <Select className="col-3" label="Vendedor" value={f.vendedor_id ?? ''} onChange={(e) => set('vendedor_id', idOuNull(e.target.value))} disabled={!editavel}>
           <option value="">—</option>
-          {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+          {listaVendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
         </Select>
         <Select className="col-3" label="Tabela de preço" value={f.tabela_preco_id ?? ''} onChange={(e) => set('tabela_preco_id', idOuNull(e.target.value))} disabled={!financeiroEditavel}
           hint="Vale para os próximos itens incluídos">
           <option value="">Preço de venda</option>
-          {tabelas.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
+          {listaTabelas.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
         </Select>
         <Input className="col-3" label="Emissão" type="date" value={f.data_emissao} onChange={(e) => set('data_emissao', e.target.value)} disabled={!editavel} />
         <Input className="col-3" label="Validade" type="date" value={f.validade ?? ''} onChange={(e) => set('validade', e.target.value || null)} disabled={!editavel} />
@@ -86,9 +106,9 @@ export function CabecalhoForm({ orcamento, vendedores, tabelas, editavel, financ
         <Select className="col-3" label="Destino" value={f.destino} onChange={(e) => set('destino', e.target.value as Destino)} disabled={!editavel}>
           {Object.entries(DESTINOS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </Select>
-        <Input className="col-4" label="Contato" value={f.contato ?? ''} onChange={(e) => set('contato', textoOuNull(e.target.value))} disabled={!editavel} />
-        <Input className="col-8" label="Endereço de entrega/instalação" value={f.endereco_entrega ?? ''} onChange={(e) => set('endereco_entrega', textoOuNull(e.target.value))} disabled={!editavel} />
-        <TextArea className="col-12" label="Observações" value={f.observacoes ?? ''} onChange={(e) => set('observacoes', textoOuNull(e.target.value))} disabled={!editavel} />
+        <Input className="col-4" label="Contato" value={f.contato ?? ''} onChange={(e) => set('contato', e.target.value)} disabled={!editavel} />
+        <Input className="col-8" label="Endereço de entrega/instalação" value={f.endereco_entrega ?? ''} onChange={(e) => set('endereco_entrega', e.target.value)} disabled={!editavel} />
+        <TextArea className="col-12" label="Observações" value={f.observacoes ?? ''} onChange={(e) => set('observacoes', e.target.value)} disabled={!editavel} />
       </div>
       {editavel && (
         <div className="actions" style={{ marginTop: 12, justifyContent: 'flex-end' }}>

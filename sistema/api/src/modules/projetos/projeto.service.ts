@@ -83,7 +83,7 @@ export class ProjetoService {
   /** Calcula as peças para um vão sem gravar nada, com o nome e a unidade de cada produto. */
   async simular(id: number, vao: VaoInput) {
     const repo = this.repo();
-    const exp = await this.expandir(this.db, id, vao);
+    const exp = await this.expandirGabarito(this.db, id, vao);
     const produtos = await repo.produtos(exp.pecas.map((p) => p.produto_id));
     const pecas = exp.pecas.map((p) => {
       const prod = produtos.get(p.produto_id);
@@ -93,11 +93,17 @@ export class ProjetoService {
     return { projeto: { id: exp.id, nome: exp.nome }, vao, pecas };
   }
 
-  /** Expansão de um projeto para um vão (usada pelo módulo de orçamentos, na transação dele). */
+  /** Expansão de um projeto para um vão (porta usada pelo módulo de orçamentos, na transação dele): exige projeto ativo. */
   async expandir(db: Db, id: number, vao: VaoInput): Promise<ProjetoExpandido> {
+    return this.expandirGabarito(db, id, vao, true);
+  }
+
+  /** Expande o gabarito; a simulação aceita projeto inativo, a inclusão em orçamento não. */
+  private async expandirGabarito(db: Db, id: number, vao: VaoInput, exigirAtivo = false): Promise<ProjetoExpandido> {
     const repo = this.repo(db);
     const row = await repo.buscar(id);
     if (!row) throw notFound('Projeto');
+    if (exigirAtivo && !row.ativo) throw badRequest(`Projeto ${row.nome} está inativo`);
     const itens = await repo.itens(id);
     const pecas = regra(() =>
       new Projeto(row.nome, itens).expandir(new Vao(vao.largura_vao_mm, vao.altura_vao_mm, vao.quantidade, vao.vidro_produto_id ?? null)),

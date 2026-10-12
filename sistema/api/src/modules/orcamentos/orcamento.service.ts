@@ -25,7 +25,7 @@ import type {
   ListaOrcamentosFiltro,
   ProjetoOrcamentoInput,
 } from './orcamentos.schemas.js';
-import type { PecaProjetoExpandida, Ports, ProjetosPort } from './ports.js';
+import type { PecaProjetoExpandida, Ports } from './ports.js';
 import { ProdutoRepository, type ProdutoComPreco } from './produto.repository.js';
 
 export type Usuario = Pick<SessionUser, 'id' | 'filial_id'>;
@@ -56,10 +56,7 @@ class Repos {
  * cada operação de escrita roda numa transação e termina recalculando e gravando os totais.
  */
 export class OrcamentoService {
-  constructor(
-    private readonly ports: Ports,
-    private readonly projetos: ProjetosPort,
-  ) {}
+  constructor(private readonly ports: Ports) {}
 
   private repos(db: Db = getPool()) {
     return new Repos(db);
@@ -107,10 +104,15 @@ export class OrcamentoService {
     await withTx(async (db) => {
       const r = this.repos(db);
       const o = await this.travar(r, u, id);
-      const alterados = CAMPOS_FINANCEIROS.filter((c) => d[c] !== undefined && Number(d[c] ?? 0) !== Number(o[c] ?? 0));
+      // O desconto efetivo é derivado no recálculo; aqui só se resolve a intenção (% ou R$) da edição.
+      const dados: AtualizarOrcamentoInput = { ...d, ...Orcamento.resolverDesconto(o, d) };
+      const alterados = CAMPOS_FINANCEIROS.filter((c) => {
+        if (c === 'desconto_valor' && Number(dados.desconto_pct) > 0) return false; // derivado do %
+        return dados[c] !== undefined && Number(dados[c] ?? 0) !== Number(o[c] ?? 0);
+      });
       regra(() => new Orcamento(o.status).garantirCabecalhoEditavel(alterados));
-      await this.validarReferencias(r, d);
-      await r.orcamentos.atualizarCabecalho(id, d);
+      await this.validarReferencias(r, dados);
+      await r.orcamentos.atualizarCabecalho(id, dados);
       await this.recalcular(r, u, id);
     });
     return this.obter(u, id);
@@ -131,7 +133,8 @@ export class OrcamentoService {
       const atual = await r.orcamentos.buscarItem(id, itemId);
       if (!atual) throw notFound('Item');
       const trocouProduto = d.produto_id !== undefined && d.produto_id !== atual.produto_id;
-      const prod = await this.produto(r, d.produto_id ?? atual.produto_id, o.tabela_preco_id);
+      // Trocar para um produto inativo é recusado; um item já gravado continua editável.
+      const prod = await this.produto(r, d.produto_id ?? atual.produto_id, o.tabela_preco_id, trocouProduto);
       const entrada: EntradaItem = {
         quantidade: d.quantidade ?? atual.quantidade,
         largura_mm: d.largura_mm !== undefined ? d.largura_mm : atual.largura_mm,
@@ -159,14 +162,14 @@ export class OrcamentoService {
     const r = this.repos();
     const o = await r.orcamentos.buscar(u.filial_id, id);
     if (!o) throw notFound('Orçamento');
-    const { nome, pecas } = await this.projetos.expandir(r.db, d.projeto_id, d);
+    const { nome, pecas } = await this.ports.projetos.expandir(r.db, d.projeto_id, d);
     const itens = await this.precificarPecas(r, pecas, o.tabela_preco_id, d.ambiente);
     return { projeto: { id: d.projeto_id, nome }, itens, total: round2(itens.reduce((s, i) => s + i.total, 0)) };
   }
 
   async adicionarProjeto(u: Usuario, id: number, d: ProjetoOrcamentoInput) {
     return this.editarItens(u, id, async (r, o) => {
-      const { nome, pecas } = await this.projetos.expandir(r.db, d.projeto_id, d);
+      const { nome, pecas } = await this.ports.projetos.expandir(r.db, d.projeto_id, d);
       const itens = await this.precificarPecas(r, pecas, o.tabela_preco_id, d.ambiente);
       const projetoOrcId = await r.orcamentos.inserirProjeto(id, { ...d, descricao: d.descricao ?? nome });
       for (const it of itens) await r.orcamentos.inserirItem(id, { ...it, orcamento_projeto_id: projetoOrcId });
@@ -293,13 +296,15 @@ export class OrcamentoService {
     const o = await r.orcamentos.buscar(u.filial_id, id);
     if (!o) throw notFound('Orçamento');
     const t = Orcamento.calcularTotais(await r.orcamentos.totaisItens(id), o);
+    regra(() => Orcamento.garantirLimites(t));
     await r.orcamentos.gravarTotais(id, { subtotal: t.subtotal, desconto_valor: Orcamento.descontoAGravar(o, t), total: t.total });
     return t;
   }
 
-  private async produto(r: Repos, produtoId: number, tabelaPrecoId: number | null): Promise<ProdutoComPreco> {
+  private async produto(r: Repos, produtoId: number, tabelaPrecoId: number | null, exigirAtivo = true): Promise<ProdutoComPreco> {
     const p = (await r.produtos.comPreco([produtoId], tabelaPrecoId)).get(produtoId);
     if (!p) throw badRequest(`Produto ${produtoId} não encontrado`);
+    if (exigirAtivo && !p.ativo) throw badRequest(`Produto ${p.codigo} - ${p.nome} está inativo`);
     return p;
   }
 
@@ -315,14 +320,14 @@ export class OrcamentoService {
       descricao: extra.descricao || prod.nome,
       ambiente: extra.ambiente,
       unidade: prod.unidade_venda,
-      quantidade: entrada.quantidade,
+      quantidade: calc.quantidade,
       largura_mm: entrada.largura_mm ?? null,
       altura_mm: entrada.altura_mm ?? null,
       largura_calc_mm: calc.largura_calc_mm,
       altura_calc_mm: calc.altura_calc_mm,
       medida_cobrada: calc.medida_cobrada,
-      preco_unitario: round2Preco(entrada.preco_unitario),
-      desconto_valor: round2(Number(entrada.desconto_valor ?? 0)),
+      preco_unitario: calc.preco_unitario,
+      desconto_valor: calc.desconto_valor,
       total: calc.total,
     };
   }
@@ -332,6 +337,7 @@ export class OrcamentoService {
     return pecas.map((p) => {
       const prod = produtos.get(p.produto_id);
       if (!prod) throw badRequest(`${p.descricao}: produto ${p.produto_id} não encontrado`);
+      if (!prod.ativo) throw badRequest(`${p.descricao}: produto ${prod.codigo} - ${prod.nome} está inativo`);
       try {
         return this.montarItem(
           prod,
@@ -348,11 +354,6 @@ export class OrcamentoService {
     const faltando = await r.orcamentos.referenciasInexistentes(d);
     if (faltando.length) throw badRequest(`Não encontrado: ${faltando.join(', ')}`);
   }
-}
-
-/** Preço unitário com até 4 casas (coluna numeric(14,4)). */
-function round2Preco(v: number): number {
-  return Math.round(Number(v) * 10000) / 10000;
 }
 
 /** Mantém a distância (em dias) entre uma data e a emissão ao trocar a emissão. */

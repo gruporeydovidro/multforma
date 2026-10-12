@@ -1,8 +1,8 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { Alert } from '../../components/ui';
 import { date, decimal, money } from '../../lib/format';
 import type { Orcamento } from './api';
-import { useOrcamento } from './hooks';
+import { useNavegacaoOrcamentos, useOrcamento } from './hooks';
 import { DESTINOS, enderecoLinha, FORMAS, medidas, STATUS } from './regras';
 
 // Estilos só deste documento; a navegação some na impressão pelo @media print global.
@@ -131,13 +131,13 @@ function Documento({ o }: { o: Orcamento }) {
 /** Versão de impressão do orçamento (window.print). */
 export function ImpressaoOrcamentoPage() {
   const { id } = useParams();
-  const nav = useNavigate();
+  const ir = useNavegacaoOrcamentos();
   const s = useOrcamento(Number(id));
   return (
     <>
       <style>{css}</style>
       <div className="actions no-print" style={{ marginBottom: 12 }}>
-        <button className="btn" onClick={() => nav(`/orcamentos/${id}`)}>Voltar</button>
+        <button className="btn" onClick={() => ir.abrir(Number(id))}>Voltar</button>
         <button className="btn primary" onClick={() => window.print()} disabled={!s.orcamento}>Imprimir</button>
       </div>
       <Alert>{s.error}</Alert>

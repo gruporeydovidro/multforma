@@ -111,11 +111,6 @@ export class Projeto {
     this.itens = itens.map((i) => new ItemProjeto(i));
   }
 
-  /** Projeto com algum item de vidro sem produto fixo exige a escolha do vidro. */
-  get exigeVidro(): boolean {
-    return this.itens.some((i) => i.dados.produto_id === null);
-  }
-
   expandir(vao: Vao): PecaProjeto[] {
     if (this.itens.length === 0) throw new ProjetoInvalidoError('Projeto sem itens');
     return this.itens.map((i) => i.expandir(vao));

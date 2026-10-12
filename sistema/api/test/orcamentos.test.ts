@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { query, queryOne, type Db } from '../src/lib/db.js';
 import { OrcamentoService } from '../src/modules/orcamentos/orcamento.service.js';
-import type { Ports, ProjetosPort } from '../src/modules/orcamentos/ports.js';
+import type { Ports } from '../src/modules/orcamentos/ports.js';
+import { arredondarDinheiro } from '../src/shared/numeros.js';
 import type { BaixaContaReceberInput, GerarContasReceberInput, MovimentoEstoqueInput } from '../src/shared/contracts.js';
 import { login, useTestApp } from './helpers.js';
 
@@ -347,6 +348,140 @@ describe('orçamentos', () => {
     });
   });
 
+  describe('regressões da revisão', () => {
+    const umMil = async () => {
+      const o = await novo();
+      await ok('POST', `/${o.id}/itens`, { produto_id: ids.kit, quantidade: 1, preco_unitario: 1000 });
+      return o;
+    };
+
+    it('desconto %: zerar ou mudar o % sem informar o valor recalcula', async () => {
+      const o = await umMil();
+      expect(await ok('PUT', `/${o.id}`, { desconto_pct: 10 })).toMatchObject({ subtotal: 1000, desconto_valor: 100, total: 900 });
+      const zerado = await ok('PUT', `/${o.id}`, { desconto_pct: 0 });
+      expect(zerado).toMatchObject({ desconto_pct: 0, desconto_valor: 0, total: 1000 });
+      expect(zerado.totais.desconto).toBe(0);
+      await ok('PUT', `/${o.id}`, { desconto_pct: 10 });
+      expect(await ok('PUT', `/${o.id}`, { desconto_pct: 5 })).toMatchObject({ desconto_valor: 50, total: 950 });
+      // o desconto derivado acompanha os itens
+      const comItem = await ok('POST', `/${o.id}/itens`, { produto_id: ids.kit, quantidade: 1, preco_unitario: 1000 });
+      expect(comItem).toMatchObject({ subtotal: 2000, desconto_valor: 100, total: 1900 });
+      // só o valor: passa ao modo R$
+      expect(await ok('PUT', `/${o.id}`, { desconto_valor: 30 })).toMatchObject({ desconto_pct: 0, desconto_valor: 30, total: 1970 });
+      // mexer em outro campo não altera o desconto
+      expect(await ok('PUT', `/${o.id}`, { frete_valor: 10 })).toMatchObject({ desconto_pct: 0, desconto_valor: 30, total: 1980 });
+    });
+
+    it('desconto %: reenviar o mesmo % num orçamento aprovado não é alteração financeira', async () => {
+      const o = await umMil();
+      await ok('PUT', `/${o.id}`, { desconto_pct: 10 });
+      await ok('POST', `/${o.id}/aprovar`);
+      expect((await req('PUT', `/${o.id}`, { desconto_pct: 10, observacoes: 'ok' })).statusCode).toBe(200);
+      expect((await req('PUT', `/${o.id}`, { desconto_pct: 10, desconto_valor: 0 })).statusCode).toBe(200);
+      expect((await req('PUT', `/${o.id}`, { desconto_pct: 0 })).statusCode).toBe(409);
+      expect((await ok('GET', `/${o.id}`))).toMatchObject({ desconto_pct: 10, total: 900 });
+    });
+
+    it('fechamento não baixa estoque de serviço, mesmo com controla_estoque', async () => {
+      await query('update produto set controla_estoque = true where id = $1', [ids.inst]);
+      try {
+        const o = await novo({ destino: 'balcao' });
+        await ok('POST', `/${o.id}/itens`, { produto_id: ids.inst, quantidade: 1 });
+        await ok('POST', `/${o.id}/itens`, { produto_id: ids.kit, quantidade: 1 });
+        const ap = await ok('POST', `/${o.id}/aprovar`);
+        await ok('POST', `/${o.id}/fechar`, { forma_pagamento: 'boleto', parcelas: [{ vencimento: '2026-12-10', valor: ap.total }] });
+        const mov = await query<{ produto_id: number }>('select produto_id from estoque_movimento where referencia_id = $1 and origem = $2', [o.id, 'venda']);
+        expect(mov.map((m) => m.produto_id)).toEqual([ids.kit]);
+      } finally {
+        await query('update produto set controla_estoque = false where id = $1', [ids.inst]);
+      }
+    });
+
+    it('schemas: datas inexistentes, medidas, quantidades e valores fora do limite dão 400', async () => {
+      const o = await novo();
+      const casos: [Metodo, string, unknown][] = [
+        ['POST', '/', { cliente_id: ids.cliente, validade: '2026-02-31' }],
+        ['POST', '/', { cliente_id: ids.cliente, data_emissao: '2026-13-01' }],
+        ['POST', '/', { cliente_id: 3_000_000_000 }],
+        ['POST', '/', { cliente_id: ids.cliente, frete_valor: 1e13 }],
+        ['PUT', `/${o.id}`, { prazo_entrega: '2026-04-31' }],
+        ['PUT', `/${o.id}`, { desconto_valor: -1 }],
+        ['GET', '/?data_ini=2026-02-30', undefined],
+        ['GET', '/99999999999', undefined],
+        ['POST', `/${o.id}/itens`, { produto_id: ids.vt8, quantidade: 1, largura_mm: 3_000_000_000, altura_mm: 1000 }],
+        ['POST', `/${o.id}/itens`, { produto_id: ids.vt8, quantidade: 1, largura_mm: 1000.5, altura_mm: 1000 }],
+        ['POST', `/${o.id}/itens`, { produto_id: ids.kit, quantidade: 1e12 }],
+        ['POST', `/${o.id}/itens`, { produto_id: ids.kit, quantidade: 1, preco_unitario: 1e11 }],
+        ['POST', `/${o.id}/itens`, { produto_id: ids.kit, quantidade: 1, preco_unitario: -5 }],
+        ['POST', `/${o.id}/itens`, { produto_id: ids.kit, quantidade: 1e8, preco_unitario: 1e6 }],
+        ['POST', `/${o.id}/projetos`, { projeto_id: ids.box, largura_vao_mm: 3_000_000_000, altura_vao_mm: 1900, vidro_produto_id: ids.vt8 }],
+        ['POST', `/${o.id}/projetos`, { projeto_id: ids.box, largura_vao_mm: 1500, altura_vao_mm: 1900, quantidade: 1e9, vidro_produto_id: ids.vt8 }],
+        ['POST', `/${o.id}/projetos/previa`, { projeto_id: ids.box, largura_vao_mm: 1500, altura_vao_mm: -1, vidro_produto_id: ids.vt8 }],
+      ];
+      for (const [m, url, body] of casos) expect((await req(m, url, body)).statusCode, `${m} ${url} ${JSON.stringify(body)}`).toBe(400);
+      const comItem = await ok('POST', `/${o.id}/itens`, { produto_id: ids.kit, quantidade: 1 });
+      const itemId = comItem.itens[0].id;
+      expect((await req('PUT', `/${o.id}/itens/${itemId}`, { largura_mm: 3_000_000_000 })).statusCode).toBe(400);
+      expect((await req('PUT', `/${o.id}/itens/${itemId}`, { quantidade: 1e12 })).statusCode).toBe(400);
+      const ap = await ok('POST', `/${o.id}/aprovar`);
+      expect((await req('POST', `/${o.id}/fechar`, { forma_pagamento: 'pix', parcelas: [{ vencimento: '2026-02-29', valor: ap.total }] })).statusCode).toBe(400);
+      expect((await req('POST', `/${o.id}/fechar`, { forma_pagamento: 'pix', parcelas: [{ vencimento: '2026-10-12', valor: 1e13 }] })).statusCode).toBe(400);
+      expect((await ok('GET', `/${o.id}`)).status).toBe('aprovado');
+    });
+
+    it('precisão: entradas arredondadas antes do cálculo; total bate com o gravado', async () => {
+      const o = await novo();
+      const a = await ok('POST', `/${o.id}/itens`, { produto_id: ids.kit, quantidade: 1, preco_unitario: 10.075 });
+      expect(a.itens[0]).toMatchObject({ preco_unitario: 10.075, total: 10.08 });
+      const b = await ok('POST', `/${o.id}/itens`, { produto_id: ids.kit, quantidade: 1.0005, preco_unitario: 100 });
+      expect(b.itens[1]).toMatchObject({ quantidade: 1.001, medida_cobrada: 1.001, total: 100.1 });
+      const c = await ok('POST', `/${o.id}/itens`, { produto_id: ids.kit, quantidade: 1000, preco_unitario: 10.00005 });
+      expect(c.itens[2]).toMatchObject({ preco_unitario: 10.0001, total: 10000.1 });
+      const gravados = await query<{ quantidade: number; preco_unitario: number; desconto_valor: number; medida_cobrada: number; total: number }>(
+        'select quantidade, preco_unitario, desconto_valor, medida_cobrada, total from orcamento_item where orcamento_id = $1 order by seq', [o.id],
+      );
+      for (const g of gravados) expect(g.total).toBe(arredondarDinheiro(g.medida_cobrada * g.preco_unitario - g.desconto_valor));
+      expect(c.subtotal).toBe(10110.28);
+    });
+
+    it('recusa produto inativo no item e projeto ou peça inativos no orçamento (400)', async () => {
+      const inativo = await id(`insert into produto (codigo, nome, unidade_venda, preco_venda, ativo) values ('INAT1', 'Produto inativo', 'UN', 10, false) returning id`);
+      const vidroInativo = await id(`insert into produto (codigo, nome, unidade_venda, preco_venda, ativo) values ('INAT2', 'Vidro inativo', 'M2', 100, false) returning id`);
+      const projetoInativo = await id(`insert into projeto (nome, ativo) values ('Projeto desativado', false) returning id`);
+      await query(`insert into projeto_item (projeto_id, descricao, tipo, produto_id, quantidade) values ($1, 'Kit', 'ferragem', $2, 1)`, [projetoInativo, ids.kit]);
+      const projetoComPecaInativa = await id(`insert into projeto (nome) values ('Projeto com peça inativa') returning id`);
+      await query(`insert into projeto_item (projeto_id, descricao, tipo, produto_id, quantidade) values ($1, 'Peça', 'ferragem', $2, 1)`, [projetoComPecaInativa, inativo]);
+
+      const o = await novo();
+      const r1 = await req('POST', `/${o.id}/itens`, { produto_id: inativo, quantidade: 1 });
+      expect(r1.statusCode).toBe(400);
+      expect(r1.json().error).toMatch(/inativo/);
+      const comItem = await ok('POST', `/${o.id}/itens`, { produto_id: ids.kit, quantidade: 1 });
+      const itemId = comItem.itens[0].id;
+      expect((await req('PUT', `/${o.id}/itens/${itemId}`, { produto_id: inativo })).statusCode).toBe(400);
+
+      const vao = { largura_vao_mm: 1500, altura_vao_mm: 1900 };
+      for (const url of [`/${o.id}/projetos`, `/${o.id}/projetos/previa`]) {
+        const p1 = await req('POST', url, { projeto_id: projetoInativo, ...vao });
+        expect(p1.statusCode, url).toBe(400);
+        expect(p1.json().error).toMatch(/Projeto desativado está inativo/);
+        expect((await req('POST', url, { projeto_id: projetoComPecaInativa, ...vao })).json().error).toMatch(/Peça: produto INAT1 - Produto inativo está inativo/);
+        expect((await req('POST', url, { projeto_id: ids.box, ...vao, vidro_produto_id: vidroInativo })).statusCode, url).toBe(400);
+      }
+      const depois = await ok('GET', `/${o.id}`);
+      expect(depois.itens).toHaveLength(1);
+      expect(depois.projetos).toHaveLength(0);
+
+      // item já gravado continua editável se o produto for desativado depois
+      await query('update produto set ativo = false where id = $1', [ids.kit]);
+      try {
+        expect((await ok('PUT', `/${o.id}/itens/${itemId}`, { quantidade: 2 })).itens[0].quantidade).toBe(2);
+      } finally {
+        await query('update produto set ativo = true where id = $1', [ids.kit]);
+      }
+    });
+  });
+
   describe('OrcamentoService com portas falsas', () => {
     it('fecha chamando as portas na ordem e na mesma transação', async () => {
       const chamadas: string[] = [];
@@ -361,11 +496,13 @@ describe('orçamentos', () => {
           baixarContaReceber: async (db: Db, a: BaixaContaReceberInput) => { conexoes.add(db); chamadas.push(`baixa:${a.id}:${a.valor}`); },
         },
         producao: { criarOrdemProducao: async (db: Db) => { conexoes.add(db); chamadas.push('producao'); return 77; } },
+        // o service recebe só `ports` e usa ports.projetos (não há segunda dependência no construtor)
+        projetos: {
+          expandir: async () => ({ id: 1, nome: 'Fake', pecas: [{ descricao: 'Peça', tipo: 'vidro', produto_id: ids.vt8, quantidade: 1, largura_mm: 500, altura_mm: 500 }] }),
+        },
+        catalogo: { atualizarCusto: async () => {} },
       };
-      const projetos: ProjetosPort = {
-        expandir: async () => ({ id: 1, nome: 'Fake', pecas: [{ descricao: 'Peça', tipo: 'vidro', produto_id: ids.vt8, quantidade: 1, largura_mm: 500, altura_mm: 500 }] }),
-      };
-      const service = new OrcamentoService(ports, projetos);
+      const service = new OrcamentoService(ports);
       const u = { id: (await queryOne<{ id: number }>(`select id from usuario where login = 'admin'`))!.id, filial_id: ids.filial };
 
       const o = await service.criar(u, { cliente_id: ids.cliente, vendedor_id: null, tabela_preco_id: null, validade: null, prazo_entrega: null, destino: 'producao',
@@ -385,8 +522,10 @@ describe('orçamentos', () => {
         estoque: { registrarMovimento: async () => { throw new Error('estoque indisponível'); }, saldo: async () => 0 },
         financeiro: { gerarContasReceber: async () => [1], baixarContaReceber: async () => {} },
         producao: { criarOrdemProducao: async () => null },
+        projetos: { expandir: async () => ({ id: 0, nome: '', pecas: [] }) },
+        catalogo: { atualizarCusto: async () => {} },
       };
-      const service = new OrcamentoService(falha, { expandir: async () => ({ id: 0, nome: '', pecas: [] }) });
+      const service = new OrcamentoService(falha);
       const u = { id: (await queryOne<{ id: number }>(`select id from usuario where login = 'admin'`))!.id, filial_id: ids.filial };
       const o = await novo();
       await ok('POST', `/${o.id}/itens`, { produto_id: ids.kit, quantidade: 1 });

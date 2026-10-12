@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  adicionarMeses,
   Arredondamento,
   CalculadoraItem,
   CobrancaPorArea,
   CobrancaPorPerimetro,
   CobrancaPorQuantidade,
-  dividirValor,
   Medida,
   Orcamento,
   PlanoParcelas,
@@ -17,7 +15,7 @@ import {
   valoresIguais,
   type ProdutoCalculo,
 } from '../src/modules/orcamentos/domain/index.js';
-import { AvaliadorFormula, Formula, Tokenizador } from '../src/modules/projetos/domain/AvaliadorFormula.js';
+import { Formula, Tokenizador } from '../src/modules/projetos/domain/AvaliadorFormula.js';
 import { FormulaError, ProjetoInvalidoError } from '../src/modules/projetos/domain/erros.js';
 import { Projeto, Vao, type DadosItemProjeto } from '../src/modules/projetos/domain/Projeto.js';
 
@@ -49,7 +47,7 @@ describe('Arredondamento e Medida', () => {
     expect(new Arredondamento(1).aplicar(1234)).toBe(1240);
   });
   it('sem arredondamento devolve a dimensão', () => {
-    expect(Arredondamento.NENHUM.aplicar(1234)).toBe(1234);
+    expect(new Arredondamento(null).aplicar(1234)).toBe(1234);
     expect(new Arredondamento(0).aplicar(1234)).toBe(1234);
   });
   it('arredonda as duas dimensões e calcula área e perímetro', () => {
@@ -82,7 +80,7 @@ describe('CalculadoraItem', () => {
 
   it('M2: arredonda, multiplica pela quantidade e aplica o preço', () => {
     const r = CalculadoraItem.calcular(vidro8, { quantidade: 2, largura_mm: 1001, altura_mm: 1999, preco_unitario: 280 });
-    expect(r).toEqual({ largura_calc_mm: 1050, altura_calc_mm: 2000, medida_cobrada: 4.2, total: 1176 });
+    expect(r).toEqual({ quantidade: 2, preco_unitario: 280, desconto_valor: 0, largura_calc_mm: 1050, altura_calc_mm: 2000, medida_cobrada: 4.2, total: 1176 });
   });
 
   it('M2: respeita a área mínima por peça', () => {
@@ -107,8 +105,9 @@ describe('CalculadoraItem', () => {
 
   it('UN/PC/KG: medida cobrada é a quantidade; medidas opcionais', () => {
     const kit: ProdutoCalculo = { unidade_venda: 'UN' };
-    expect(CalculadoraItem.calcular(kit, { quantidade: 3, preco_unitario: 210 })).toEqual({ largura_calc_mm: null, altura_calc_mm: null, medida_cobrada: 3, total: 630 });
-    expect(CalculadoraItem.calcular({ unidade_venda: 'KG' }, { quantidade: 1.2345, preco_unitario: 10 }).total).toBe(12.35);
+    expect(CalculadoraItem.calcular(kit, { quantidade: 3, preco_unitario: 210 })).toMatchObject({ largura_calc_mm: null, altura_calc_mm: null, medida_cobrada: 3, total: 630 });
+    // quantidade gravada com 3 casas: 1,2345 → 1,235 (o total usa a quantidade gravada)
+    expect(CalculadoraItem.calcular({ unidade_venda: 'KG' }, { quantidade: 1.2345, preco_unitario: 10 })).toMatchObject({ quantidade: 1.235, medida_cobrada: 1.235, total: 12.35 });
     expect(CalculadoraItem.calcular({ unidade_venda: 'PC', arredondamento_cm: 5 }, { quantidade: 1, largura_mm: 333, preco_unitario: 5 }).largura_calc_mm).toBe(350);
   });
 
@@ -119,9 +118,37 @@ describe('CalculadoraItem', () => {
     expect(r.total).toBe(11.09);
   });
 
+  it('arredonda as entradas à precisão gravada antes de calcular (regressão)', () => {
+    const un: ProdutoCalculo = { unidade_venda: 'UN' };
+    // Codex: UN, quantidade 1, preço 10,075 → 10,08 (meio centavo arredonda para cima)
+    expect(CalculadoraItem.calcular(un, { quantidade: 1, preco_unitario: 10.075 }).total).toBe(10.08);
+    for (const [preco, total] of [[0.005, 0.01], [1.005, 1.01], [2.675, 2.68], [1.115, 1.12]] as const) {
+      expect(CalculadoraItem.calcular(un, { quantidade: 1, preco_unitario: preco }).total, String(preco)).toBe(total);
+    }
+    // quantidade 1,0005 é gravada como 1,001: o total precisa ser 1,001 x 100 = 100,10 (não 100,05)
+    expect(CalculadoraItem.calcular(un, { quantidade: 1.0005, preco_unitario: 100 })).toMatchObject({ quantidade: 1.001, medida_cobrada: 1.001, total: 100.1 });
+    // preço 10,00005 é gravado como 10,0001: 1000 x 10,0001 = 10.000,10
+    expect(CalculadoraItem.calcular(un, { quantidade: 1000, preco_unitario: 10.00005 })).toMatchObject({ preco_unitario: 10.0001, total: 10000.1 });
+    // desconto com 2 casas
+    expect(CalculadoraItem.calcular(un, { quantidade: 1, preco_unitario: 10, desconto_valor: 0.005 })).toMatchObject({ desconto_valor: 0.01, total: 9.99 });
+    // total = quantidade gravada x preço gravado - desconto gravado
+    for (const e of [{ quantidade: 2.3456, preco_unitario: 33.33335 }, { quantidade: 0.0015, preco_unitario: 999.99995 }]) {
+      const r = CalculadoraItem.calcular(un, e);
+      expect(r.total).toBe(round2(r.quantidade * r.preco_unitario - r.desconto_valor));
+    }
+  });
+
+  it('recusa valores que não cabem nas colunas', () => {
+    expect(() => CalculadoraItem.calcular({ unidade_venda: 'UN' }, { quantidade: 1e10, preco_unitario: 1 })).toThrow(/Quantidade acima/);
+    expect(() => CalculadoraItem.calcular({ unidade_venda: 'UN' }, { quantidade: 1e8, preco_unitario: 1e6 })).toThrow(/Total do item acima/);
+    expect(() => CalculadoraItem.calcular({ unidade_venda: 'M2' }, { quantidade: 1e6, largura_mm: 100000, altura_mm: 100000, preco_unitario: 0 })).toThrow(/Medida cobrada acima/);
+    expect(() => CalculadoraItem.calcular({ unidade_venda: 'UN' }, { quantidade: 0.0004, preco_unitario: 1 })).toThrow(/Quantidade/); // 0,0004 → 0,000
+  });
+
   it('aplica o desconto do item e valida valores', () => {
+    // desconto gravado com 2 casas (10,56): total = 100 - 10,56, coerente com o que fica no banco
     const r = CalculadoraItem.calcular({ unidade_venda: 'UN' }, { quantidade: 2, preco_unitario: 50, desconto_valor: 10.555 });
-    expect(r.total).toBe(89.45);
+    expect(r).toMatchObject({ desconto_valor: 10.56, total: 89.44 });
     expect(() => CalculadoraItem.calcular({ unidade_venda: 'UN' }, { quantidade: 1, preco_unitario: 10, desconto_valor: 11 })).toThrow(/Desconto/);
     expect(() => CalculadoraItem.calcular({ unidade_venda: 'UN' }, { quantidade: 0, preco_unitario: 10 })).toThrow(/Quantidade/);
     expect(() => CalculadoraItem.calcular({ unidade_venda: 'UN' }, { quantidade: 1, preco_unitario: -1 })).toThrow(/Preço/);
@@ -148,10 +175,37 @@ describe('Orcamento: totais', () => {
     expect(Orcamento.calcularTotais([33.33], { desconto_pct: 7.5 }).desconto).toBe(2.5);
     expect(Orcamento.calcularTotais([0.1, 0.2], {}).subtotal).toBe(0.3);
   });
+  it('limita os totais às colunas do cabeçalho', () => {
+    expect(() => Orcamento.garantirLimites(Orcamento.calcularTotais([999_999_999_999, 1], {}))).toThrow(/acima do limite/);
+    expect(() => Orcamento.garantirLimites(Orcamento.calcularTotais([1000], {}))).not.toThrow();
+  });
   it('desconto a gravar: efetivo com %, digitado sem %', () => {
     const t = Orcamento.calcularTotais([200], { desconto_pct: 5 });
     expect(Orcamento.descontoAGravar({ desconto_pct: 5, desconto_valor: 0 }, t)).toBe(10);
     expect(Orcamento.descontoAGravar({ desconto_pct: 0, desconto_valor: 300 }, Orcamento.calcularTotais([200], { desconto_valor: 300 }))).toBe(300);
+  });
+});
+
+describe('Orcamento: intenção de desconto (regressão: zerar o %)', () => {
+  const comPct = { desconto_pct: 10, desconto_valor: 100 }; // 10% de 1000, valor derivado gravado
+  it('mudar o % sem informar o valor descarta o valor derivado', () => {
+    expect(Orcamento.resolverDesconto(comPct, { desconto_pct: 0 })).toEqual({ desconto_pct: 0, desconto_valor: 0 });
+    expect(Orcamento.resolverDesconto(comPct, { desconto_pct: 5 })).toEqual({ desconto_pct: 5, desconto_valor: 0 });
+    // o total é derivado do novo %: 1000 com 5% = 950; com 0% = 1000
+    const r5 = Orcamento.resolverDesconto(comPct, { desconto_pct: 5 });
+    expect(Orcamento.calcularTotais([1000], r5).total).toBe(950);
+    expect(Orcamento.calcularTotais([1000], Orcamento.resolverDesconto(comPct, { desconto_pct: 0 })).total).toBe(1000);
+  });
+  it('mesmo % ou nenhum campo de desconto mantém o gravado', () => {
+    expect(Orcamento.resolverDesconto(comPct, { desconto_pct: 10 })).toEqual(comPct);
+    expect(Orcamento.resolverDesconto(comPct, { frete_valor: 5 })).toEqual(comPct);
+    expect(Orcamento.resolverDesconto({ desconto_pct: 0, desconto_valor: 66 }, {})).toEqual({ desconto_pct: 0, desconto_valor: 66 });
+  });
+  it('valor informado: com % prevalece o %; só o valor passa ao modo R$', () => {
+    expect(Orcamento.resolverDesconto(comPct, { desconto_pct: 0, desconto_valor: 66 })).toEqual({ desconto_pct: 0, desconto_valor: 66 });
+    expect(Orcamento.resolverDesconto(comPct, { desconto_valor: 50 })).toEqual({ desconto_pct: 0, desconto_valor: 50 });
+    expect(Orcamento.resolverDesconto(comPct, { desconto_valor: 0 })).toEqual(comPct); // zero não desliga o %
+    expect(Orcamento.resolverDesconto({ desconto_pct: 0, desconto_valor: 66 }, { desconto_valor: 0 })).toEqual({ desconto_pct: 0, desconto_valor: 0 });
   });
 });
 
@@ -192,23 +246,11 @@ describe('Orcamento: status', () => {
 });
 
 describe('PlanoParcelas', () => {
-  it('divide o valor sem perder centavos', () => {
-    expect(dividirValor(100, 3)).toEqual([33.34, 33.33, 33.33]);
-    expect(dividirValor(0.05, 2)).toEqual([0.03, 0.02]);
-    expect(() => dividirValor(10, 0)).toThrow();
-  });
-  it('soma meses respeitando o fim do mês', () => {
-    expect(adicionarMeses('2026-01-31', 1)).toBe('2026-02-28');
-    expect(adicionarMeses('2028-01-31', 1)).toBe('2028-02-29');
-    expect(adicionarMeses('2026-11-15', 2)).toBe('2027-01-15');
-    expect(adicionarMeses('2026-05-10', 0)).toBe('2026-05-10');
-  });
-  it('gera parcelas mensais que somam o total', () => {
-    const p = PlanoParcelas.gerar({ total: 1000, quantidade: 3, primeiroVencimento: '2026-10-12', forma: 'boleto' });
-    expect(p.parcelas.map((x) => [x.numero, x.vencimento, x.valor])).toEqual([
-      [1, '2026-10-12', 333.34],
-      [2, '2026-11-12', 333.33],
-      [3, '2026-12-12', 333.33],
+  it('soma as parcelas e valida contra o total', () => {
+    const p = new PlanoParcelas([
+      { numero: 1, vencimento: '2026-10-12', valor: 333.34, forma_pagamento: 'boleto' },
+      { numero: 2, vencimento: '2026-11-12', valor: 333.33, forma_pagamento: 'boleto' },
+      { numero: 3, vencimento: '2026-12-12', valor: 333.33, forma_pagamento: 'boleto' },
     ]);
     expect(p.soma).toBe(1000);
     expect(() => p.validarSoma(1000)).not.toThrow();
@@ -237,9 +279,9 @@ describe('PlanoParcelas', () => {
   });
 });
 
-describe('AvaliadorFormula', () => {
+describe('Formula (avaliador seguro)', () => {
   const v = { L: 1500, A: 1900 };
-  const av = (f: string, vars = v) => AvaliadorFormula.avaliar(f, vars);
+  const av = (f: string, vars = v) => Formula.compilar(f).avaliar(vars);
 
   it('números, variáveis e precedência', () => {
     expect(av('42')).toBe(42);
@@ -301,9 +343,9 @@ describe('AvaliadorFormula', () => {
   });
   it('limita o tamanho e valida sem avaliar', () => {
     expect(() => av('1+'.repeat(150) + '1')).toThrow(/longa/);
-    expect(AvaliadorFormula.validar('L/2+25')).toBeNull();
-    expect(AvaliadorFormula.validar('L/')).toMatch(/incompleta/);
-    expect(AvaliadorFormula.validar('L/0')).toBeNull(); // só sintaxe; o zero aparece ao avaliar
+    expect(() => Formula.compilar('L/2+25')).not.toThrow();
+    expect(() => Formula.compilar('L/')).toThrow(/incompleta/);
+    expect(() => Formula.compilar('L/0')).not.toThrow(); // só sintaxe; o zero aparece ao avaliar
   });
   it('fórmula compilada pode ser reavaliada', () => {
     const f = Formula.compilar('L/2 + 25');
@@ -340,7 +382,6 @@ describe('Projeto: expansão', () => {
   });
   it('exige o vidro quando há item de vidro sem produto', () => {
     const projeto = new Projeto('Box', itensBox);
-    expect(projeto.exigeVidro).toBe(true);
     expect(() => projeto.expandir(new Vao(1500, 1900, 1, null))).toThrow(/escolha o vidro/);
   });
   it('valida vão, itens e fórmulas', () => {

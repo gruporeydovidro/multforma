@@ -1,3 +1,4 @@
+import { arredondar } from '../../../shared/numeros.js';
 import { RegraOrcamentoError } from './erros.js';
 import { Arredondamento, Medida } from './Medida.js';
 import { round2, round4 } from './numeros.js';
@@ -22,6 +23,10 @@ export interface EntradaItem {
 }
 
 export interface ItemCalculado {
+  /** Entradas já na precisão das colunas (quantidade 3 casas, preço 4, desconto 2): o total bate com o gravado. */
+  quantidade: number;
+  preco_unitario: number;
+  desconto_valor: number;
   largura_calc_mm: number | null;
   altura_calc_mm: number | null;
   medida_cobrada: number;
@@ -54,6 +59,9 @@ export class CobrancaPorQuantidade implements EstrategiaCobranca {
   }
 }
 
+/** Limites das colunas de orcamento_item (numeric(12,3), numeric(14,4) e numeric(14,2)). */
+export const LIMITES_ITEM = { quantidade: 999_999_999, medidaCobrada: 9_999_999_999, total: 999_999_999_999 } as const;
+
 /** Calcula medidas arredondadas, medida cobrada e total de um item, escolhendo a estratégia pela unidade. */
 export class CalculadoraItem {
   private static readonly estrategias: Record<Unidade, EstrategiaCobranca> = {
@@ -71,17 +79,24 @@ export class CalculadoraItem {
   }
 
   static calcular(produto: ProdutoCalculo, item: EntradaItem): ItemCalculado {
-    const quantidade = Number(item.quantidade);
-    const preco = Number(item.preco_unitario);
-    const desconto = Number(item.desconto_valor ?? 0);
+    // Arredonda as entradas à precisão gravada antes de calcular, para o total conferir com quantidade x preço gravados.
+    const quantidade = arredondar(Number(item.quantidade), 3);
+    const preco = arredondar(Number(item.preco_unitario), 4);
+    const desconto = arredondar(Number(item.desconto_valor ?? 0), 2);
     if (!(quantidade > 0)) throw new RegraOrcamentoError('Quantidade deve ser maior que zero');
+    if (quantidade > LIMITES_ITEM.quantidade) throw new RegraOrcamentoError('Quantidade acima do limite');
     if (!(preco >= 0)) throw new RegraOrcamentoError('Preço unitário não pode ser negativo');
     if (!(desconto >= 0)) throw new RegraOrcamentoError('Desconto do item não pode ser negativo');
 
     const medida = Medida.de(item.largura_mm, item.altura_mm).arredondar(new Arredondamento(produto.arredondamento_cm ?? null));
     const medidaCobrada = round4(CalculadoraItem.estrategia(produto.unidade_venda).medidaCobrada(medida, quantidade, produto));
+    if (medidaCobrada > LIMITES_ITEM.medidaCobrada) throw new RegraOrcamentoError('Medida cobrada acima do limite');
     const total = round2(medidaCobrada * preco - desconto);
     if (total < 0) throw new RegraOrcamentoError('Desconto do item maior que o valor do item');
-    return { largura_calc_mm: medida.largura, altura_calc_mm: medida.altura, medida_cobrada: medidaCobrada, total };
+    if (total > LIMITES_ITEM.total) throw new RegraOrcamentoError('Total do item acima do limite');
+    return {
+      quantidade, preco_unitario: preco, desconto_valor: desconto,
+      largura_calc_mm: medida.largura, altura_calc_mm: medida.altura, medida_cobrada: medidaCobrada, total,
+    };
   }
 }

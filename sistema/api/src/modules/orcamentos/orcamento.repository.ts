@@ -241,13 +241,17 @@ export class OrcamentoRepository {
     await query('delete from orcamento_item where id = $1', [itemId], this.db);
   }
 
-  /** Itens cujo produto controla estoque (para a baixa no fechamento). */
+  /**
+   * Itens de produto (não serviço) que controla estoque, para a baixa no fechamento.
+   * Em ordem crescente de produto (itens do mesmo produto juntos, pela sequência): a porta de estoque
+   * trava cada produto, e vendas concorrentes travando na mesma ordem não entram em deadlock.
+   */
   itensComEstoque(orcamentoId: number) {
     return query<{ id: number; produto_id: number; medida_cobrada: number }>(
       `select oi.id, oi.produto_id, oi.medida_cobrada
          from orcamento_item oi join produto p on p.id = oi.produto_id
-        where oi.orcamento_id = $1 and p.controla_estoque
-        order by oi.seq`,
+        where oi.orcamento_id = $1 and p.tipo = 'produto' and p.controla_estoque
+        order by oi.produto_id, oi.seq, oi.id`,
       [orcamentoId],
       this.db,
     );
