@@ -160,7 +160,7 @@ object FrmBackupDB: TFrmBackupDB
       Height = 19
       PasswordChar = '*'
       TabOrder = 3
-      Text = 'Sql-1997'
+      Text = '***REMOVIDO***'
     end
   end
 end
