@@ -1,3 +1,4 @@
+import { arredondar } from '../../../shared/numeros.js';
 import { ErroDeValidacao } from './erros.js';
 
 export interface PrecoTabela {
@@ -16,7 +17,7 @@ export class PrecosDoProduto {
       if (!Number.isFinite(preco) || preco < 0) throw new ErroDeValidacao('precos', 'O preço não pode ser negativo');
       vistos.add(tabela_preco_id);
     }
-    return new PrecosDoProduto(itens.map((i) => ({ tabela_preco_id: i.tabela_preco_id, preco: Math.round(i.preco * 10000) / 10000 })));
+    return new PrecosDoProduto(itens.map((i) => ({ tabela_preco_id: i.tabela_preco_id, preco: arredondar(i.preco, 4) })));
   }
 
   get tabelas(): number[] {

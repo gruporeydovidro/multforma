@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const listQuery = z.object({
   q: z.string().trim().optional(),
-  page: z.coerce.number().int().min(1).default(1),
+  page: z.coerce.number().int().min(1).max(100_000).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });
 

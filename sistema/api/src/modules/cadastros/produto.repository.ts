@@ -60,8 +60,10 @@ export class ProdutoRepository extends CadastroRepository<Produto, ProdutoItem, 
     return `${exato}lower(p.nome), p.id`;
   }
 
-  async atualizarCusto(id: number, custo: number): Promise<void> {
-    await query('update produto set custo = $2 where id = $1', [id, custo], this.db);
+  /** Devolve false se o produto não existe. */
+  async atualizarCusto(id: number, custo: number): Promise<boolean> {
+    const rows = await query('update produto set custo = $2 where id = $1 returning id', [id, custo], this.db);
+    return rows.length > 0;
   }
 
   async codigoEmUso(codigo: string, excetoId?: number): Promise<boolean> {

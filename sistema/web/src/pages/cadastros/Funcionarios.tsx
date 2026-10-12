@@ -4,7 +4,7 @@ import { can, useAuth } from '../../lib/auth';
 import { decimal } from '../../lib/format';
 import { cadastrosApi, type Funcionario } from './api';
 import { AtivoBadge, Checkbox, FILTRO_ATIVO, FormularioCadastro, ListaCadastro, SimNao, type FiltroLista } from './components';
-import { excluirRegistro, useEdicao, useNavegacaoCadastro } from './hooks';
+import { confirmarDesativacao, excluirRegistro, useEdicao, useNavegacaoCadastro } from './hooks';
 import { doFormulario, paraFormulario, type ValoresForm } from './util';
 
 const ROTA = 'cadastros/funcionarios';
@@ -48,6 +48,7 @@ export function FuncionarioForm() {
   const { id, form, registro, carregando } = useEdicao(param, cadastrosApi.funcionarios.obter, VAZIO, (f) => paraFormulario(f, CAMPOS));
 
   const salvar = async () => {
+    if (form.enviando || !confirmarDesativacao(registro, form.valores)) return;
     if (await form.enviar(() => cadastrosApi.funcionarios.salvar(id, doFormulario(form.valores, ['comissao_pct'])))) nav.voltar();
   };
   const excluir = async () => {
@@ -74,7 +75,7 @@ export function FuncionarioForm() {
           <Checkbox label="Ativo" className="col-2" {...form.marca('ativo')} />
           <Input label="Telefone" className="col-4" {...form.campo('telefone')} />
           <Input label="E-mail" className="col-4" type="email" {...form.campo('email')} />
-          <Input label="Comissão (%)" className="col-4" type="number" min="0" max="100" step="0.001" {...form.campo('comissao_pct')} />
+          <Input label="Comissão (%)" className="col-4" inputMode="decimal" {...form.campo('comissao_pct')} />
           <Checkbox label="É vendedor (aparece nos orçamentos)" className="col-6" {...form.marca('vendedor')} />
           <Checkbox label="É instalador" className="col-6" {...form.marca('instalador')} />
         </div>

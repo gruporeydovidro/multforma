@@ -1,37 +1,48 @@
 // Funções puras do módulo Cadastros (conversão de formulário, mensagens e rótulos).
 import { ApiError } from '../../lib/api';
+import { lerNumero } from '../../lib/numero';
 import type { Perfil } from '../../lib/auth';
 import type { PrecoTabela, ResultadoExclusao, TipoPessoa, UnidadeVenda } from './api';
 
 /** Estado de formulário: texto para inputs e booleano para checkboxes. */
 export type ValoresForm = Record<string, string | boolean>;
 
-/** Registro da API → valores de formulário (null vira '', número vira texto). */
+/**
+ * Número para um campo de texto em pt-BR, com vírgula decimal e sem milhar ('12,345'), que `lerNumero`
+ * lê de volta sem ambiguidade ('12.345' seria lido como doze mil).
+ */
+export function textoNumero(n: number): string {
+  return String(n).replace('.', ',');
+}
+
+/** Registro da API → valores de formulário (null vira '', número vira texto pt-BR). */
 export function paraFormulario(registro: object, campos: string[]): ValoresForm {
   const fonte = registro as Record<string, unknown>;
   const valores: ValoresForm = {};
   for (const campo of campos) {
     const v = fonte[campo];
-    valores[campo] = typeof v === 'boolean' ? v : v === null || v === undefined ? '' : String(v);
+    valores[campo] = typeof v === 'boolean' ? v : v === null || v === undefined ? '' : typeof v === 'number' ? textoNumero(v) : String(v);
   }
   return valores;
 }
 
-/** Valores de formulário → corpo da API ('' vira null; campos numéricos viram número). */
+/**
+ * Valores de formulário → corpo da API ('' vira null; campos numéricos viram número pelo `lerNumero`:
+ * '1.500' = 1500, '1.234,56' = 1234.56). Número ilegível vira null e a API aponta o campo.
+ */
 export function doFormulario(valores: ValoresForm, numericos: string[] = []): Record<string, unknown> {
   const dados: Record<string, unknown> = {};
   for (const [campo, v] of Object.entries(valores)) {
     if (typeof v === 'boolean') dados[campo] = v;
     else if (v.trim() === '') dados[campo] = null;
-    else dados[campo] = numericos.includes(campo) ? paraNumero(v) : v;
+    else dados[campo] = numericos.includes(campo) ? lerNumero(v) : v;
   }
   return dados;
 }
 
-/** Aceita '1234.5' e '1.234,5'. */
-export function paraNumero(texto: string): number {
-  const t = texto.trim();
-  return Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t);
+/** A gravação vai desativar um registro que está ativo (pede confirmação). */
+export function desativando(atual: object | undefined, valores: ValoresForm): boolean {
+  return (atual as { ativo?: unknown } | undefined)?.ativo === true && valores.ativo === false;
 }
 
 /** Erros por campo devolvidos pela API (formato `details.fieldErrors`). */
@@ -62,8 +73,15 @@ export function margemPct(custo: number, preco: number): number | null {
 /** Mapa tabela → preço digitado para a lista enviada à API (em branco = sem preço próprio). */
 export function listaDePrecos(precos: Record<number, string>): PrecoTabela[] {
   return Object.entries(precos)
-    .filter(([, v]) => v.trim() !== '')
-    .map(([tabela, v]) => ({ tabela_preco_id: Number(tabela), preco: paraNumero(v) }));
+    .map(([tabela, v]) => ({ tabela_preco_id: Number(tabela), preco: lerNumero(v) }))
+    .filter((p): p is PrecoTabela => p.preco !== null);
+}
+
+/** Tabelas cujo preço digitado não é um número (em branco não conta). */
+export function precosInvalidos(precos: Record<number, string>): number[] {
+  return Object.entries(precos)
+    .filter(([, v]) => v.trim() !== '' && lerNumero(v) === null)
+    .map(([tabela]) => Number(tabela));
 }
 
 /** Erro da confirmação de senha, conferida no navegador antes de enviar. */

@@ -4,6 +4,7 @@ import { badRequest, conflict, HttpError } from '../../../lib/http.js';
 import { ErroDeValidacao } from '../domain/erros.js';
 import type { CadastroRepository, Dados } from './cadastro.repository.js';
 import type { FiltroBase, Pagina, Paginacao } from './consulta.js';
+import type { EmTransacao } from './transacao.js';
 
 /** Nome do cadastro para as mensagens, com o gênero gramatical. */
 export interface Rotulo {
@@ -24,7 +25,8 @@ export function comoErroHttp(err: unknown): unknown {
 
 /**
  * Casos de uso comuns a todo cadastro (listar, obter, criar, atualizar, excluir ou desativar).
- * As subclasses aplicam as regras próprias nos ganchos `prepararCriacao`, `prepararEdicao` e `antesDeExcluir`.
+ * As subclasses aplicam as regras próprias nos ganchos `prepararCriacao`, `prepararEdicao` e `antesDeExcluir`;
+ * `aposCriar` e `aposAtualizar` (ex.: log) rodam na mesma transação da gravação, que é desfeita se eles falharem.
  */
 export abstract class CadastroService<
   TDetalhe extends QueryResultRow,
@@ -32,10 +34,16 @@ export abstract class CadastroService<
   TFiltro extends FiltroBase,
   TCriar extends Dados,
   TEditar extends Dados,
+  TRepo extends CadastroRepository<TDetalhe, TItem, TFiltro> = CadastroRepository<TDetalhe, TItem, TFiltro>,
 > {
+  /**
+   * @param repo repositório ligado ao pool, para leituras.
+   * @param transacao fábrica que abre uma transação com o repositório ligado a ela, para as gravações.
+   */
   constructor(
-    protected readonly repo: CadastroRepository<TDetalhe, TItem, TFiltro>,
+    protected readonly repo: TRepo,
     private readonly rotulo: Rotulo,
+    protected readonly transacao: EmTransacao<TRepo>,
   ) {}
 
   listar(filtro: TFiltro & Paginacao): Promise<Pagina<TItem>> {
@@ -50,13 +58,21 @@ export abstract class CadastroService<
 
   async criar(dados: TCriar, autor: SessionUser): Promise<TDetalhe> {
     const prontos = await this.regra(() => this.prepararCriacao(dados, autor));
-    return this.obter(await this.repo.inserir(prontos));
+    const id = await this.transacao(async (repo) => {
+      const novo = await repo.inserir(prontos);
+      await this.aposCriar(repo, novo, autor);
+      return novo;
+    });
+    return this.obter(id);
   }
 
   async atualizar(id: number, dados: TEditar, autor: SessionUser): Promise<TDetalhe> {
     const atual = await this.obter(id);
     const prontos = await this.regra(() => this.prepararEdicao(dados, atual, autor));
-    await this.repo.atualizar(id, prontos);
+    await this.transacao(async (repo) => {
+      await repo.atualizar(id, prontos);
+      await this.aposAtualizar(repo, id, autor);
+    });
     return this.obter(id);
   }
 
@@ -79,6 +95,12 @@ export abstract class CadastroService<
   }
 
   protected antesDeExcluir(_id: number, _autor: SessionUser): void | Promise<void> {}
+
+  /** Depois do insert, na mesma transação (`repo` está ligado a ela). */
+  protected aposCriar(_repo: TRepo, _id: number, _autor: SessionUser): void | Promise<void> {}
+
+  /** Depois do update, na mesma transação (`repo` está ligado a ela). */
+  protected aposAtualizar(_repo: TRepo, _id: number, _autor: SessionUser): void | Promise<void> {}
 
   /** Executa uma etapa com regras de domínio, convertendo ErroDeValidacao em erro HTTP. */
   protected async regra<T>(fn: () => T | Promise<T>): Promise<T> {

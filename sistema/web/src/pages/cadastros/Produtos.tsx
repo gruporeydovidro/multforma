@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Alert, Card, DataTable, Input, Select } from '../../components/ui';
 import { can, useAuth } from '../../lib/auth';
@@ -6,8 +6,9 @@ import { decimal, money } from '../../lib/format';
 import { useAsync } from '../../lib/useAsync';
 import { cadastrosApi, type ProdutoItem, type TabelaPreco } from './api';
 import { AtivoBadge, Checkbox, FILTRO_ATIVO, FormularioCadastro, ListaCadastro, SimNao } from './components';
-import { excluirRegistro, useEdicao, useNavegacaoCadastro } from './hooks';
-import { doFormulario, listaDePrecos, margemPct, paraFormulario, paraNumero, UNIDADES, type ValoresForm } from './util';
+import { confirmarDesativacao, excluirRegistro, useEdicao, useNavegacaoCadastro } from './hooks';
+import { lerNumero } from '../../lib/numero';
+import { doFormulario, listaDePrecos, margemPct, paraFormulario, precosInvalidos, textoNumero, UNIDADES, type ValoresForm } from './util';
 
 const ROTA = 'cadastros/produtos';
 const CAMPOS = [
@@ -67,22 +68,41 @@ export function ProdutoForm() {
   const { id: param } = useParams();
   const { user } = useAuth();
   const nav = useNavegacaoCadastro(ROTA);
-  const { id, form, registro, carregando } = useEdicao(param, cadastrosApi.produtos.obter, VAZIO, (p) => paraFormulario(p, CAMPOS));
+  const { id, form, registro, carregando, assumir } = useEdicao(param, cadastrosApi.produtos.obter, VAZIO, (p) => paraFormulario(p, CAMPOS));
   const apoio = useApoioProduto();
   const [precos, setPrecos] = useState<Record<number, string>>({});
+  /** Produto cujos preços já estão na tela (criado agora): não recarregar por cima do que foi digitado. */
+  const precosDe = useRef<number | null>(null);
 
   useEffect(() => {
-    if (id === null) return;
+    if (id === null || precosDe.current === id) return;
+    precosDe.current = id;
     cadastrosApi.produtos.precos(id)
-      .then((lista) => setPrecos(Object.fromEntries(lista.map((p) => [p.tabela_preco_id, String(p.preco)]))))
+      .then((lista) => setPrecos(Object.fromEntries(lista.map((p) => [p.tabela_preco_id, textoNumero(p.preco)]))))
       .catch((e) => form.setErro(e.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  /**
+   * Grava o produto e depois os preços por tabela. Logo após criar, a tela passa a ser a do produto criado
+   * (rota trocada com replace), para que uma falha nos preços não faça o próximo Salvar criá-lo de novo.
+   */
   const salvar = async () => {
+    if (form.enviando) return;
+    if (precosInvalidos(precos).length) return form.setErro('Há preço por tabela inválido. Corrija ou deixe em branco.');
+    if (!confirmarDesativacao(registro, form.valores)) return;
     const ok = await form.enviar(async () => {
       const produto = await cadastrosApi.produtos.salvar(id, doFormulario(form.valores, NUMERICOS));
-      await cadastrosApi.produtos.salvarPrecos(produto.id, listaDePrecos(precos));
+      if (id === null) {
+        precosDe.current = produto.id;
+        assumir(produto.id, produto);
+        nav.trocarPara(produto.id);
+      }
+      try {
+        await cadastrosApi.produtos.salvarPrecos(produto.id, listaDePrecos(precos));
+      } catch (e) {
+        throw new Error(`Produto salvo, mas os preços por tabela não foram gravados: ${(e as Error).message}. Corrija e salve de novo.`);
+      }
     });
     if (ok) nav.voltar();
   };
@@ -93,9 +113,16 @@ export function ProdutoForm() {
     nav.voltar();
   };
 
+  /** Serviço não controla estoque; ao virar produto, volta ao padrão (controla). */
+  const trocarTipo = (tipo: string) => {
+    form.definir('tipo', tipo);
+    form.definir('controla_estoque', tipo === 'produto');
+  };
+
+  const servico = form.valores.tipo === 'servico';
   const vidro = form.valores.unidade_venda === 'M2';
-  const custo = paraNumero(String(form.valores.custo || 0));
-  const venda = paraNumero(String(form.valores.preco_venda || 0));
+  const custo = lerNumero(String(form.valores.custo)) ?? 0;
+  const venda = lerNumero(String(form.valores.preco_venda)) ?? 0;
   const margem = margemPct(custo, venda);
 
   return (
@@ -113,7 +140,7 @@ export function ProdutoForm() {
         <div className="grid">
           <Input label="Código" className="col-2" required autoFocus {...form.campo('codigo')} />
           <Input label="Nome" className="col-6" required {...form.campo('nome')} />
-          <Select label="Tipo" className="col-2" {...form.campo('tipo')}>
+          <Select label="Tipo" className="col-2" {...form.campo('tipo')} onChange={(e) => trocarTipo(e.target.value)}>
             <option value="produto">Produto</option>
             <option value="servico">Serviço</option>
           </Select>
@@ -130,23 +157,23 @@ export function ProdutoForm() {
       </Card>
       <Card title="Medidas e cálculo">
         <div className="grid">
-          <Input label="Espessura (mm)" className="col-3" type="number" min="0" step="0.01" {...form.campo('espessura_mm')} />
+          <Input label="Espessura (mm)" className="col-3" inputMode="decimal" {...form.campo('espessura_mm')} />
           <Select label="Arredondamento" className="col-3" {...form.campo('arredondamento_id')}>
             <option value="">Sem arredondamento</option>
             {apoio.data?.arredondamentos.map((a) => <option key={a.id} value={a.id}>{a.descricao} ({a.valor_cm} cm)</option>)}
           </Select>
-          <Input label="Área mínima (m²)" className="col-3" type="number" min="0" step="0.0001" disabled={!vidro}
+          <Input label="Área mínima (m²)" className="col-3" inputMode="decimal" disabled={!vidro}
             hint={vidro ? 'Cobrança mínima por peça' : 'Só para venda em m²'} {...form.campo('area_minima_m2')} />
-          <Input label="Perda (%)" className="col-3" type="number" min="0" max="100" step="0.001" {...form.campo('perda_pct')} />
+          <Input label="Perda (%)" className="col-3" inputMode="decimal" {...form.campo('perda_pct')} />
         </div>
       </Card>
       <Card title="Custo, preço e estoque">
         <div className="grid">
-          <Input label="Custo (R$)" className="col-3" type="number" min="0" step="0.0001" {...form.campo('custo')} />
-          <Input label="Preço de venda (R$)" className="col-3" type="number" min="0" step="0.0001"
+          <Input label="Custo (R$)" className="col-3" inputMode="decimal" {...form.campo('custo')} />
+          <Input label="Preço de venda (R$)" className="col-3" inputMode="decimal"
             hint={margem === null ? undefined : `Margem: ${decimal(margem, 1)}%`} {...form.campo('preco_venda')} />
-          <Input label="Estoque mínimo" className="col-3" type="number" min="0" step="0.0001" {...form.campo('estoque_minimo')} />
-          <Checkbox label="Controla estoque" className="col-3" {...form.marca('controla_estoque')} />
+          <Input label="Estoque mínimo" className="col-3" inputMode="decimal" {...form.campo('estoque_minimo')} />
+          <Checkbox label="Controla estoque" className="col-3" disabled={servico} {...form.marca('controla_estoque')} />
         </div>
       </Card>
       <Card title="Preços por tabela">
@@ -161,7 +188,7 @@ export function ProdutoForm() {
               header: 'Preço (R$)',
               width: '200px',
               render: (t) => (
-                <input type="number" min="0" step="0.0001" aria-label={`Preço na tabela ${t.nome}`} placeholder={String(venda)}
+                <input inputMode="decimal" aria-label={`Preço na tabela ${t.nome}`} placeholder={textoNumero(venda)}
                   value={precos[t.id] ?? ''} onChange={(e) => setPrecos((p) => ({ ...p, [t.id]: e.target.value }))} />
               ),
             },
@@ -170,7 +197,7 @@ export function ProdutoForm() {
               align: 'right',
               width: '100px',
               render: (t) => {
-                const m = margemPct(custo, precos[t.id] ? paraNumero(precos[t.id]) : venda);
+                const m = margemPct(custo, lerNumero(precos[t.id]) ?? venda);
                 return m === null ? '' : `${decimal(m, 1)}%`;
               },
             },

@@ -5,15 +5,13 @@ import type { EmTransacao } from './base/transacao.js';
 import type { ProdutoCriar, ProdutoEditar, ProdutoFiltro } from './cadastros.schemas.js';
 import { ErroDeValidacao } from './domain/erros.js';
 import { PrecosDoProduto, type PrecoTabela } from './domain/precos.js';
+import { ControleDeEstoque } from './domain/produto.js';
 import type { PrecoProduto, Produto, ProdutoItem, ProdutoRepository } from './produto.repository.js';
 
-/** Produtos: código único, grupo e arredondamento existentes e preços por tabela. */
-export class ProdutoService extends CadastroService<Produto, ProdutoItem, ProdutoFiltro, ProdutoCriar, ProdutoEditar> {
-  constructor(
-    private readonly produtos: ProdutoRepository,
-    private readonly transacao: EmTransacao<ProdutoRepository>,
-  ) {
-    super(produtos, { nome: 'Produto', genero: 'm' });
+/** Produtos: código único, grupo e arredondamento existentes, controle de estoque conforme o tipo e preços por tabela. */
+export class ProdutoService extends CadastroService<Produto, ProdutoItem, ProdutoFiltro, ProdutoCriar, ProdutoEditar, ProdutoRepository> {
+  constructor(private readonly produtos: ProdutoRepository, transacao: EmTransacao<ProdutoRepository>) {
+    super(produtos, { nome: 'Produto', genero: 'm' }, transacao);
   }
 
   async listarPrecos(produtoId: number): Promise<PrecoProduto[]> {
@@ -32,13 +30,15 @@ export class ProdutoService extends CadastroService<Produto, ProdutoItem, Produt
   }
 
   protected async prepararCriacao(dados: ProdutoCriar): Promise<Dados> {
+    const controla_estoque = ControleDeEstoque.resolver(dados.tipo, dados.controla_estoque);
     await this.validarReferencias(dados);
-    return dados;
+    return { ...dados, controla_estoque };
   }
 
   protected async prepararEdicao(dados: ProdutoEditar, atual: Produto): Promise<Dados> {
+    const controla_estoque = ControleDeEstoque.resolver(dados.tipo, dados.controla_estoque, atual);
     await this.validarReferencias(dados, atual.id);
-    return dados;
+    return { ...dados, controla_estoque };
   }
 
   private async validarReferencias(dados: ProdutoEditar, excetoId?: number): Promise<void> {

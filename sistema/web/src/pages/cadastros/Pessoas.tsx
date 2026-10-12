@@ -4,7 +4,7 @@ import { can, useAuth } from '../../lib/auth';
 import { money } from '../../lib/format';
 import { cadastrosApi, type PessoaItem } from './api';
 import { AtivoBadge, CAMPOS_ENDERECO, CamposEndereco, Checkbox, FILTRO_ATIVO, FormularioCadastro, ListaCadastro } from './components';
-import { excluirRegistro, useEdicao, useNavegacaoCadastro } from './hooks';
+import { confirmarDesativacao, excluirRegistro, useEdicao, useNavegacaoCadastro } from './hooks';
 import { doFormulario, paraFormulario, TIPOS_PESSOA, type ValoresForm } from './util';
 
 type Papel = 'cliente' | 'fornecedor';
@@ -57,6 +57,7 @@ export function PessoaForm({ papel }: { papel: Papel }) {
   const juridica = form.valores.natureza === 'J';
 
   const salvar = async () => {
+    if (form.enviando || !confirmarDesativacao(registro, form.valores)) return;
     if (await form.enviar(() => cadastrosApi.pessoas.salvar(id, doFormulario(form.valores, ['limite_credito'])))) nav.voltar();
   };
   const excluir = async () => {
@@ -90,7 +91,7 @@ export function PessoaForm({ papel }: { papel: Papel }) {
           <Input label={juridica ? 'Nome fantasia' : 'Apelido'} className="col-6" {...form.campo('fantasia')} />
           <Input label={juridica ? 'CNPJ' : 'CPF'} className="col-4" hint="Opcional; validado pelo dígito verificador" {...form.campo('cpf_cnpj')} />
           <Input label={juridica ? 'Inscrição estadual' : 'RG'} className="col-4" {...form.campo('rg_ie')} />
-          <Input label="Limite de crédito (R$)" className="col-4" type="number" min="0" step="0.01"
+          <Input label="Limite de crédito (R$)" className="col-4" inputMode="decimal"
             hint={registro ? `Atual: ${money(registro.limite_credito)}` : undefined} {...form.campo('limite_credito')} />
         </div>
       </Card>

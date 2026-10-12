@@ -3,6 +3,7 @@ import { CpfCnpj } from '../src/modules/cadastros/domain/cpf-cnpj.js';
 import { ErroDeValidacao } from '../src/modules/cadastros/domain/erros.js';
 import { DocumentoDaPessoa } from '../src/modules/cadastros/domain/pessoa.js';
 import { PrecosDoProduto } from '../src/modules/cadastros/domain/precos.js';
+import { ControleDeEstoque } from '../src/modules/cadastros/domain/produto.js';
 import { Senha } from '../src/modules/cadastros/domain/senha.js';
 import { Login, PoliticaDeAutoAlteracao } from '../src/modules/cadastros/domain/usuario.js';
 
@@ -117,5 +118,29 @@ describe('PrecosDoProduto', () => {
     const p = PrecosDoProduto.criar([{ tabela_preco_id: 3, preco: 10.123456 }]);
     expect(p.itens).toEqual([{ tabela_preco_id: 3, preco: 10.1235 }]);
     expect(p.tabelas).toEqual([3]);
+  });
+});
+
+describe('ControleDeEstoque', () => {
+  it('na criação, o padrão é true para produto e false para serviço', () => {
+    expect(ControleDeEstoque.resolver(undefined, undefined)).toBe(true);
+    expect(ControleDeEstoque.resolver('produto', undefined)).toBe(true);
+    expect(ControleDeEstoque.resolver('servico', undefined)).toBe(false);
+    expect(ControleDeEstoque.resolver('produto', false)).toBe(false);
+    expect(ControleDeEstoque.resolver('servico', false)).toBe(false);
+  });
+
+  it('recusa serviço que controla estoque', () => {
+    expect(erro(() => ControleDeEstoque.resolver('servico', true)).campo).toBe('controla_estoque');
+    expect(erro(() => ControleDeEstoque.resolver(undefined, true, { tipo: 'servico', controla_estoque: false })).campo).toBe('controla_estoque');
+  });
+
+  it('na edição, só aplica o padrão quando o tipo muda sem o campo', () => {
+    const produto = { tipo: 'produto' as const, controla_estoque: false };
+    expect(ControleDeEstoque.resolver(undefined, undefined, produto)).toBeUndefined();
+    expect(ControleDeEstoque.resolver('produto', undefined, produto)).toBeUndefined();
+    expect(ControleDeEstoque.resolver('servico', undefined, { tipo: 'produto', controla_estoque: true })).toBe(false);
+    expect(ControleDeEstoque.resolver('produto', undefined, { tipo: 'servico', controla_estoque: false })).toBe(true);
+    expect(ControleDeEstoque.resolver('produto', false, { tipo: 'servico', controla_estoque: false })).toBe(false);
   });
 });

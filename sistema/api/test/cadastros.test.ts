@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { query } from '../src/lib/db.js';
+import { getPool, query, queryOne } from '../src/lib/db.js';
+import { CatalogoService } from '../src/modules/cadastros/catalogo.service.js';
 import { login, useTestApp } from './helpers.js';
 
 const BASE = '/api/cadastros';
@@ -179,6 +180,65 @@ describe('cadastros', () => {
       expect((await req('PUT', `/produtos/${produtoId}/precos`, [], producao)).statusCode).toBe(403);
     });
 
+    it('controla estoque por padrão só em produto; serviço nunca controla', async () => {
+      const produto = await req('POST', '/produtos', { codigo: 'CE-P', nome: 'Produto padrão' });
+      expect(produto.json().controla_estoque).toBe(true);
+      const servico = await req('POST', '/produtos', { codigo: 'CE-S', nome: 'Serviço padrão', tipo: 'servico' });
+      expect(servico.statusCode).toBe(201);
+      expect(servico.json().controla_estoque).toBe(false);
+      const semControle = await req('POST', '/produtos', { codigo: 'CE-P2', nome: 'Produto sem controle', controla_estoque: false });
+      expect(semControle.json().controla_estoque).toBe(false);
+
+      const recusado = await req('POST', '/produtos', { codigo: 'CE-S2', nome: 'Serviço com estoque', tipo: 'servico', controla_estoque: true });
+      expect(recusado.statusCode).toBe(400);
+      expect(recusado.json().details.fieldErrors.controla_estoque).toEqual(['Serviço não controla estoque']);
+      expect((await req('GET', '/produtos?q=CE-S2')).json().total).toBe(0);
+    });
+
+    it('ao trocar o tipo sem informar controla_estoque, aplica o padrão do novo tipo', async () => {
+      const p = (await req('POST', '/produtos', { codigo: 'CE-T', nome: 'Troca de tipo' })).json();
+      const paraServico = await req('PUT', `/produtos/${p.id}`, { tipo: 'servico' });
+      expect(paraServico.json()).toMatchObject({ tipo: 'servico', controla_estoque: false });
+      expect((await req('PUT', `/produtos/${p.id}`, { controla_estoque: true })).statusCode).toBe(400);
+      expect((await req('PUT', `/produtos/${p.id}`, { tipo: 'produto', controla_estoque: true })).json().controla_estoque).toBe(true);
+
+      // Mesmo tipo: o valor atual é mantido.
+      await req('PUT', `/produtos/${p.id}`, { controla_estoque: false });
+      expect((await req('PUT', `/produtos/${p.id}`, { tipo: 'produto', nome: 'Renomeado' })).json().controla_estoque).toBe(false);
+      await req('PUT', `/produtos/${p.id}`, { tipo: 'servico' });
+      expect((await req('PUT', `/produtos/${p.id}`, { tipo: 'produto' })).json().controla_estoque).toBe(true);
+    });
+
+    it('recusa valores acima das colunas com 400 e erro no campo (não 500)', async () => {
+      const campos: [string, unknown][] = [
+        ['preco_venda', 1e10], ['custo', 1e12], ['estoque_minimo', 1e11], ['area_minima_m2', 1e6],
+        ['espessura_mm', 1e5], ['perda_pct', 101], ['grupo_id', 3e9], ['arredondamento_id', 1.5],
+      ];
+      for (const [campo, valor] of campos) {
+        const res = await req('POST', '/produtos', { codigo: 'OVF', nome: 'Overflow', [campo]: valor });
+        expect(res.statusCode, campo).toBe(400);
+        expect(res.json().details.fieldErrors[campo], campo).toBeDefined();
+      }
+      expect((await req('POST', '/produtos', { codigo: 'OVF', nome: 'No limite', preco_venda: 9_999_999_999, custo: 0.0001 })).statusCode).toBe(201);
+      expect((await req('PUT', `/produtos/${produtoId}/precos`, [{ tabela_preco_id: tabelas[0].id, preco: 1e11 }])).statusCode).toBe(400);
+      expect((await req('PUT', `/produtos/${produtoId}/precos`, [{ tabela_preco_id: 99_999_999_999, preco: 1 }])).statusCode).toBe(400);
+      expect((await req('GET', '/produtos/99999999999')).statusCode).toBe(400);
+      expect((await req('PUT', '/produtos/99999999999', { nome: 'x' })).statusCode).toBe(400);
+    });
+
+    it('catálogo (porta): atualiza o custo arredondado a 4 casas e recusa produto inexistente', async () => {
+      const catalogo = new CatalogoService();
+      await catalogo.atualizarCusto(getPool(), produtoId, 12.345678);
+      expect((await queryOne('select custo from produto where id = $1', [produtoId])).custo).toBe(12.3457);
+      await catalogo.atualizarCusto(getPool(), produtoId, 2.00005);
+      expect((await queryOne('select custo from produto where id = $1', [produtoId])).custo).toBe(2.0001);
+
+      await expect(catalogo.atualizarCusto(getPool(), 999_999, 10)).rejects.toMatchObject({ status: 404, message: 'Produto 999999 não encontrado' });
+      await expect(catalogo.atualizarCusto(getPool(), produtoId, -1)).rejects.toMatchObject({ status: 400 });
+      await expect(catalogo.atualizarCusto(getPool(), produtoId, Number.NaN)).rejects.toMatchObject({ status: 400 });
+      await expect(catalogo.atualizarCusto(getPool(), produtoId, 1e12)).rejects.toMatchObject({ status: 400 });
+    });
+
     it('exclui produto sem vínculo (preços vão junto) e desativa o que tem vínculo', async () => {
       expect((await req('DELETE', `/produtos/${produtoId}`)).statusCode).toBe(204);
       const kit = (await req('GET', '/produtos?q=KITBOX')).json().items[0];
@@ -191,6 +251,8 @@ describe('cadastros', () => {
   describe('funcionários', () => {
     it('só admin grava; filtros vendedor e instalador', async () => {
       expect((await req('POST', '/funcionarios', { nome: 'João' }, vendedor)).statusCode).toBe(403);
+      expect((await req('POST', '/funcionarios', { nome: 'Comissão alta', comissao_pct: 1000 })).statusCode).toBe(400);
+      expect((await req('POST', '/pessoas', { nome: 'Limite alto', limite_credito: 1e13 })).statusCode).toBe(400);
       const res = await req('POST', '/funcionarios', { nome: 'João Instalador', instalador: true, comissao_pct: 2 });
       expect(res.statusCode).toBe(201);
       expect(res.json()).toMatchObject({ vendedor: false, instalador: true, comissao_pct: 2 });
@@ -224,7 +286,9 @@ describe('cadastros', () => {
     });
 
     it('arredondamento valida valor_cm', async () => {
-      expect((await req('POST', '/arredondamentos', { descricao: 'Zero', valor_cm: 0 })).statusCode).toBe(400);
+      for (const valor_cm of [0, -5, 1.5, 100_000, 1e12]) {
+        expect((await req('POST', '/arredondamentos', { descricao: 'Inválido', valor_cm })).statusCode, String(valor_cm)).toBe(400);
+      }
       const res = await req('POST', '/arredondamentos', { descricao: 'Múltiplo de 3 cm', valor_cm: 3 });
       expect(res.statusCode).toBe(201);
       const lista = (await req('GET', '/arredondamentos')).json().items.map((a: any) => a.valor_cm);
@@ -326,6 +390,50 @@ describe('cadastros', () => {
       expect((await req('PUT', `/usuarios/${usuarioId}`, { ativo: false })).json().ativo).toBe(false);
       const entrar = await t.app.inject({ method: 'POST', url: '/api/auth/login', payload: { login: 'carla.f', senha: 'nova123' } });
       expect(entrar.statusCode).toBe(401);
+    });
+  });
+
+  describe('transação da gravação com o log', () => {
+    /** Faz todo insert em log_sistema falhar enquanto fn roda. */
+    async function comLogQuebrado(fn: () => Promise<void>) {
+      await query(`create or replace function falha_log() returns trigger language plpgsql as $$ begin raise exception 'log indisponível'; end $$`);
+      await query('create trigger falha_log before insert on log_sistema for each row execute function falha_log()');
+      try {
+        await fn();
+      } finally {
+        await query('drop trigger falha_log on log_sistema');
+        await query('drop function falha_log()');
+      }
+    }
+    const entrar = (login: string, senha: string) => t.app.inject({ method: 'POST', url: '/api/auth/login', payload: { login, senha } });
+
+    it('grava o log da criação, da edição e da senha', async () => {
+      const u = (await req('POST', '/usuarios', { nome: 'Com log', login: 'comlog', senha: '123456', perfil: 'vendedor' })).json();
+      await req('PUT', `/usuarios/${u.id}`, { nome: 'Com log 2' });
+      await req('PUT', `/usuarios/${u.id}/senha`, { senha: '654321' });
+      const acoes = await query(`select acao from log_sistema where entidade = 'usuario' and entidade_id = $1 order by id`, [u.id]);
+      expect(acoes.map((l) => l.acao)).toEqual(['usuario_criado', 'usuario_alterado', 'usuario_senha_redefinida']);
+    });
+
+    it('falha no log desfaz a criação, a edição e a troca de senha', async () => {
+      const u = (await req('POST', '/usuarios', { nome: 'Original', login: 'txuser', senha: '123456', perfil: 'vendedor' })).json();
+      const cookieU = await (async () => {
+        const r = await entrar('txuser', '123456');
+        return `vg_session=${r.cookies.find((c) => c.name === 'vg_session')!.value}`;
+      })();
+
+      await comLogQuebrado(async () => {
+        expect((await req('POST', '/usuarios', { nome: 'Sem log', login: 'semlog', senha: '123456', perfil: 'vendedor' })).statusCode).toBe(500);
+        expect((await req('PUT', `/usuarios/${u.id}`, { nome: 'Alterado' })).statusCode).toBe(500);
+        expect((await req('PUT', `/usuarios/${u.id}/senha`, { senha: 'trocada1' })).statusCode).toBe(500);
+        expect((await req('PUT', '/minha-senha', { senha_atual: '123456', nova_senha: 'trocada2' }, cookieU)).statusCode).toBe(500);
+      });
+
+      expect(await queryOne(`select 1 from usuario where login = 'semlog'`)).toBeUndefined();
+      expect((await req('GET', `/usuarios/${u.id}`)).json().nome).toBe('Original');
+      expect((await entrar('txuser', '123456')).statusCode).toBe(200);
+      expect((await entrar('txuser', 'trocada1')).statusCode).toBe(401);
+      expect((await entrar('txuser', 'trocada2')).statusCode).toBe(401);
     });
   });
 

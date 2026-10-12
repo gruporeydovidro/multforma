@@ -19,16 +19,19 @@ import { UsuarioService } from './usuario.service.js';
 
 export type ServicosCadastros = ReturnType<typeof criarServicosCadastros>;
 
-/** Monta os services do módulo com os repositórios ligados ao pool (ou a outro `db`). */
+/**
+ * Monta os services do módulo: leituras com os repositórios ligados ao pool (ou a outro `db`) e gravações
+ * com a fábrica `emTransacao`, que cria os repositórios com o client da transação.
+ */
 export function criarServicosCadastros(db: Db = getPool()) {
   return {
-    pessoas: new PessoaService(new PessoaRepository(db)),
+    pessoas: new PessoaService(new PessoaRepository(db), emTransacao((tx) => new PessoaRepository(tx))),
     produtos: new ProdutoService(new ProdutoRepository(db), emTransacao((tx) => new ProdutoRepository(tx))),
-    funcionarios: new FuncionarioService(new FuncionarioRepository(db)),
-    grupos: new GrupoService(new GrupoRepository(db)),
-    arredondamentos: new ArredondamentoService(new ArredondamentoRepository(db)),
-    tabelasPreco: new TabelaPrecoService(new TabelaPrecoRepository(db)),
-    filiais: new FilialService(new FilialRepository(db)),
-    usuarios: new UsuarioService(new UsuarioRepository(db)),
+    funcionarios: new FuncionarioService(new FuncionarioRepository(db), emTransacao((tx) => new FuncionarioRepository(tx))),
+    grupos: new GrupoService(new GrupoRepository(db), emTransacao((tx) => new GrupoRepository(tx))),
+    arredondamentos: new ArredondamentoService(new ArredondamentoRepository(db), emTransacao((tx) => new ArredondamentoRepository(tx))),
+    tabelasPreco: new TabelaPrecoService(new TabelaPrecoRepository(db), emTransacao((tx) => new TabelaPrecoRepository(tx))),
+    filiais: new FilialService(new FilialRepository(db), emTransacao((tx) => new FilialRepository(tx))),
+    usuarios: new UsuarioService(new UsuarioRepository(db), emTransacao((tx) => new UsuarioRepository(tx))),
   };
 }

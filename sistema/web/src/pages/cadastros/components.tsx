@@ -3,7 +3,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Alert, Badge, Card, DataTable, Input, Modal, PageHeader, Pager, SearchBox, Select, type Column } from '../../components/ui';
 import type { Paged } from '../../lib/api';
 import type { Filtro, ResultadoExclusao } from './api';
-import { excluirRegistro, useFormulario, useListagem, type Formulario } from './hooks';
+import { confirmarDesativacao, excluirRegistro, useFormulario, useListagem, type Formulario } from './hooks';
 import { doFormulario, paraFormulario, UFS, type ValoresForm } from './util';
 
 export function Checkbox({ label, checked, onChange, className, disabled }: {
@@ -51,7 +51,7 @@ export function ListaCadastro<T extends { id: number }>({ titulo, subtitulo, lis
   busca?: string;
   versao?: number;
 }) {
-  const lista = useListagem(listar, fixos, versao);
+  const lista = useListagem(listar, ['q', ...filtros.map((f) => f.nome)], fixos, versao);
   return (
     <>
       <PageHeader title={titulo} subtitle={subtitulo} actions={acoes} />
@@ -86,7 +86,7 @@ export function FormularioCadastro({ titulo, subtitulo, form, podeGravar, carreg
 }) {
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (podeGravar) onSalvar();
+    if (podeGravar && !form.enviando && !carregando) onSalvar();
   };
   return (
     <form onSubmit={submit}>
@@ -174,6 +174,8 @@ export function CadastroSimples<T extends { id: number }>({ titulo, subtitulo, r
     setAviso(mensagem);
   };
   const salvar = async () => {
+    if (form.enviando) return;
+    if (editando !== 'novo' && !confirmarDesativacao(editando ?? undefined, form.valores)) return;
     if (await form.enviar(() => recurso.salvar(id, doFormulario(form.valores, numericos)))) concluir();
   };
   const excluir = async () => {
@@ -201,9 +203,9 @@ export function CadastroSimples<T extends { id: number }>({ titulo, subtitulo, r
         onClose={() => setEditando(null)}
         footer={
           <>
-            {id !== null && <button className="btn danger" disabled={form.enviando} onClick={excluir}>Excluir</button>}
-            <button className="btn ghost" onClick={() => setEditando(null)}>Cancelar</button>
-            <button className="btn primary" disabled={form.enviando} onClick={salvar}>{form.enviando ? 'Salvando…' : 'Salvar'}</button>
+            {id !== null && <button type="button" className="btn danger" disabled={form.enviando} onClick={excluir}>Excluir</button>}
+            <button type="button" className="btn ghost" disabled={form.enviando} onClick={() => setEditando(null)}>Cancelar</button>
+            <button type="button" className="btn primary" disabled={form.enviando} onClick={salvar}>{form.enviando ? 'Salvando…' : 'Salvar'}</button>
           </>
         }
       >
@@ -213,10 +215,10 @@ export function CadastroSimples<T extends { id: number }>({ titulo, subtitulo, r
             c.tipo === 'marca' ? (
               <Checkbox key={c.nome} label={c.rotulo} className={c.className ?? 'col-12'} {...form.marca(c.nome)} />
             ) : (
-              <Input key={c.nome} label={c.rotulo} hint={c.dica} className={c.className ?? 'col-12'} type={c.tipo === 'numero' ? 'number' : 'text'} {...form.campo(c.nome)} />
+              <Input key={c.nome} label={c.rotulo} hint={c.dica} className={c.className ?? 'col-12'} inputMode={c.tipo === 'numero' ? 'decimal' : undefined} {...form.campo(c.nome)} />
             ),
           )}
-          <button type="submit" hidden />
+          <button type="submit" hidden disabled={form.enviando} />
         </form>
       </Modal>
     </>

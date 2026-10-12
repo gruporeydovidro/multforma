@@ -1,9 +1,13 @@
 import { z } from 'zod';
 import { listQuery } from '../../lib/paging.js';
+import { valorNaoNegativo } from '../../shared/validacao.js';
 
 // ---------- peças reutilizáveis ----------
 
-export const idParam = z.object({ id: z.coerce.number().int().positive() });
+/** Id inteiro positivo dentro do `integer` do Postgres (ids maiores dariam erro de banco). */
+const id = z.coerce.number().int().positive().max(2_147_483_647, 'Id inválido');
+
+export const idParam = z.object({ id });
 
 /** Texto opcional: aparado; vazio vira null. */
 const texto = (max: number) =>
@@ -31,10 +35,11 @@ const uf = z
 const vazioComoNulo = (v: unknown) => (v === '' ? null : v);
 
 /** Número opcional que aceita null (e '' como null). */
-const numeroOuNulo = (min = 0) => z.preprocess(vazioComoNulo, z.coerce.number().min(min, `Mínimo ${min}`).nullable().optional());
+const numeroOuNulo = (min: number, max: number) =>
+  z.preprocess(vazioComoNulo, z.coerce.number().min(min, `Mínimo ${min}`).max(max, `Máximo ${max}`).nullable().optional());
 
 /** Chave estrangeira opcional. */
-const idOuNulo = z.preprocess(vazioComoNulo, z.coerce.number().int().positive().nullable().optional());
+const idOuNulo = z.preprocess(vazioComoNulo, id.nullable().optional());
 
 const valor = (min = 0, max?: number) => {
   const n = z.coerce.number().min(min, `Mínimo ${min}`);
@@ -71,7 +76,7 @@ export const pessoaCriar = z.object({
   telefone: texto(30),
   celular: texto(30),
   ...endereco,
-  limite_credito: valor(0).default(0),
+  limite_credito: valorNaoNegativo.default(0),
   observacoes: texto(2000),
   ativo: z.boolean().default(true),
 });
@@ -92,14 +97,17 @@ export const produtoCriar = z.object({
   tipo: z.enum(['produto', 'servico']).default('produto'),
   grupo_id: idOuNulo,
   unidade_venda: z.enum(unidadesVenda).default('UN'),
-  espessura_mm: numeroOuNulo(0),
+  // Limites compatíveis com as colunas: espessura numeric(6,2), perda numeric(6,3), área numeric(10,4),
+  // custo, preço e estoque mínimo numeric(14,4).
+  espessura_mm: numeroOuNulo(0, 1000),
   perda_pct: valor(0, 100).default(0),
   arredondamento_id: idOuNulo,
-  area_minima_m2: valor(0).default(0),
-  custo: valor(0).default(0),
-  preco_venda: valor(0).default(0),
-  estoque_minimo: valor(0).default(0),
-  controla_estoque: z.boolean().default(true),
+  area_minima_m2: valor(0, 1000).default(0),
+  custo: valorNaoNegativo.default(0),
+  preco_venda: valorNaoNegativo.default(0),
+  estoque_minimo: valorNaoNegativo.default(0),
+  /** Sem valor: o padrão depende do tipo (ver ControleDeEstoque). */
+  controla_estoque: z.boolean().optional(),
   ncm: texto(10),
   ativo: z.boolean().default(true),
 });
@@ -107,13 +115,13 @@ export const produtoEditar = produtoCriar.partial();
 export const produtoFiltro = comAtivo
   .extend({
     tipo: z.enum(['produto', 'servico']).optional(),
-    grupo_id: z.coerce.number().int().positive().optional(),
+    grupo_id: id.optional(),
     /** Alias de grupo_id. */
-    grupo: z.coerce.number().int().positive().optional(),
+    grupo: id.optional(),
   })
   .transform(({ grupo, ...f }) => ({ ...f, grupo_id: f.grupo_id ?? grupo }));
 
-const precoItem = z.object({ tabela_preco_id: z.coerce.number().int().positive(), preco: valor(0) });
+const precoItem = z.object({ tabela_preco_id: id, preco: valorNaoNegativo });
 const listaPrecos = z.array(precoItem).max(200);
 /** Aceita a lista pura ou `{ precos: [...] }`. */
 export const precosProduto = z.union([listaPrecos, z.object({ precos: listaPrecos }).transform((b) => b.precos)]);
@@ -131,6 +139,7 @@ export const funcionarioCriar = z.object({
   email,
   vendedor: z.boolean().default(false),
   instalador: z.boolean().default(false),
+  /** numeric(6,3). */
   comissao_pct: valor(0, 100).default(0),
   ativo: z.boolean().default(true),
 });
@@ -192,7 +201,7 @@ const usuarioDados = z.object({
   nome: obrigatorio(150, 'Informe o nome'),
   login: obrigatorio(60, 'Informe o login'),
   perfil: z.enum(perfis, { required_error: 'Informe o perfil' }),
-  filial_id: z.coerce.number().int().positive().optional(),
+  filial_id: id.optional(),
   ativo: z.boolean().default(true),
 });
 export const usuarioCriar = usuarioDados.extend({ senha: z.string({ required_error: 'Informe a senha' }) });

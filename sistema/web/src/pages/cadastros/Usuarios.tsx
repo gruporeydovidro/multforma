@@ -5,7 +5,7 @@ import { useAuth } from '../../lib/auth';
 import { useAsync } from '../../lib/useAsync';
 import { cadastrosApi, type Usuario } from './api';
 import { AtivoBadge, Checkbox, FILTRO_ATIVO, FormularioCadastro, ListaCadastro, type FiltroLista } from './components';
-import { excluirRegistro, useEdicao, useFormulario, useNavegacaoCadastro } from './hooks';
+import { confirmarDesativacao, excluirRegistro, useEdicao, useFormulario, useNavegacaoCadastro } from './hooks';
 import { doFormulario, erroConfirmacao, paraFormulario, PERFIS, type ValoresForm } from './util';
 
 const ROTA = 'cadastros/usuarios';
@@ -50,9 +50,11 @@ export function UsuarioForm() {
   const proprio = id !== null && id === user?.id;
 
   const salvar = async () => {
+    if (form.enviando) return;
     const { confirmacao, ...valores } = form.valores;
     const confirmar = id === null ? erroConfirmacao(String(valores.senha), String(confirmacao)) : undefined;
     if (confirmar) return form.setErro(confirmar);
+    if (!confirmarDesativacao(registro, form.valores)) return;
     if (await form.enviar(() => cadastrosApi.usuarios.salvar(id, doFormulario(valores, ['filial_id'])))) nav.voltar();
   };
   const excluir = async () => {
@@ -112,6 +114,7 @@ export function UsuarioForm() {
 function RedefinirSenha({ usuarioId, aberto, onFechar }: { usuarioId: number; aberto: boolean; onFechar: (ok: boolean) => void }) {
   const form = useFormulario({ senha: '', confirmacao: '' });
   const salvar = async () => {
+    if (form.enviando) return;
     const confirmar = erroConfirmacao(String(form.valores.senha), String(form.valores.confirmacao));
     if (confirmar) return form.setErro(confirmar);
     if (await form.enviar(() => cadastrosApi.usuarios.redefinirSenha(usuarioId, String(form.valores.senha)))) {
@@ -126,7 +129,7 @@ function RedefinirSenha({ usuarioId, aberto, onFechar }: { usuarioId: number; ab
       onClose={() => onFechar(false)}
       footer={
         <>
-          <button type="button" className="btn ghost" onClick={() => onFechar(false)}>Cancelar</button>
+          <button type="button" className="btn ghost" disabled={form.enviando} onClick={() => onFechar(false)}>Cancelar</button>
           <button type="button" className="btn primary" disabled={form.enviando} onClick={salvar}>{form.enviando ? 'Salvando…' : 'Redefinir'}</button>
         </>
       }
@@ -135,7 +138,7 @@ function RedefinirSenha({ usuarioId, aberto, onFechar }: { usuarioId: number; ab
       <form className="grid" onSubmit={(e) => { e.preventDefault(); salvar(); }}>
         <Input label="Nova senha" className="col-12" type="password" autoComplete="new-password" autoFocus {...form.campo('senha')} />
         <Input label="Confirmação" className="col-12" type="password" autoComplete="new-password" {...form.campo('confirmacao')} />
-        <button type="submit" hidden />
+        <button type="submit" hidden disabled={form.enviando} />
       </form>
     </Modal>
   );

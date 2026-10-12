@@ -1,6 +1,7 @@
 import type { SessionUser } from '../../lib/auth.js';
 import type { Dados } from './base/cadastro.repository.js';
 import { CadastroService } from './base/cadastro.service.js';
+import type { EmTransacao } from './base/transacao.js';
 import type { FiltroComAtivo, FilialCriar, FilialEditar } from './cadastros.schemas.js';
 import { CpfCnpj } from './domain/cpf-cnpj.js';
 import { ErroDeValidacao } from './domain/erros.js';
@@ -8,8 +9,8 @@ import type { Filial, FilialRepository } from './filial.repository.js';
 
 /** Filiais: CNPJ validado quando informado; o usuário não pode desativar a filial em que está logado. */
 export class FilialService extends CadastroService<Filial, Filial, FiltroComAtivo, FilialCriar, FilialEditar> {
-  constructor(filiais: FilialRepository) {
-    super(filiais, { nome: 'Filial', genero: 'f' });
+  constructor(filiais: FilialRepository, transacao: EmTransacao<FilialRepository>) {
+    super(filiais, { nome: 'Filial', genero: 'f' }, transacao);
   }
 
   protected prepararCriacao(dados: FilialCriar): Dados {

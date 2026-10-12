@@ -14,6 +14,7 @@ export function MinhaSenhaPage() {
 
   const salvar = async (e: FormEvent) => {
     e.preventDefault();
+    if (form.enviando) return;
     setSucesso(false);
     const { senha_atual, nova_senha, confirmacao } = form.valores as typeof VAZIO;
     const confirmar = erroConfirmacao(nova_senha, confirmacao);

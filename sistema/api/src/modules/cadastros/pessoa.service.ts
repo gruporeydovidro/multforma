@@ -1,14 +1,15 @@
 import { conflict } from '../../lib/http.js';
 import type { Dados } from './base/cadastro.repository.js';
 import { CadastroService } from './base/cadastro.service.js';
+import type { EmTransacao } from './base/transacao.js';
 import type { PessoaCriar, PessoaEditar, PessoaFiltro } from './cadastros.schemas.js';
 import { DocumentoDaPessoa, type Natureza } from './domain/pessoa.js';
 import type { Pessoa, PessoaItem, PessoaRepository } from './pessoa.repository.js';
 
 /** Clientes e fornecedores: CPF/CNPJ validado conforme a natureza e único no cadastro. */
 export class PessoaService extends CadastroService<Pessoa, PessoaItem, PessoaFiltro, PessoaCriar, PessoaEditar> {
-  constructor(private readonly pessoas: PessoaRepository) {
-    super(pessoas, { nome: 'Cliente/fornecedor', genero: 'm' });
+  constructor(private readonly pessoas: PessoaRepository, transacao: EmTransacao<PessoaRepository>) {
+    super(pessoas, { nome: 'Cliente/fornecedor', genero: 'm' }, transacao);
   }
 
   protected async prepararCriacao(dados: PessoaCriar): Promise<Dados> {

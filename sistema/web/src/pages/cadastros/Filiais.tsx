@@ -3,7 +3,7 @@ import { Card, Input } from '../../components/ui';
 import { can, useAuth } from '../../lib/auth';
 import { cadastrosApi, type Filial } from './api';
 import { AtivoBadge, CAMPOS_ENDERECO, CamposEndereco, Checkbox, FILTRO_ATIVO, FormularioCadastro, ListaCadastro } from './components';
-import { excluirRegistro, useEdicao, useNavegacaoCadastro } from './hooks';
+import { confirmarDesativacao, excluirRegistro, useEdicao, useNavegacaoCadastro } from './hooks';
 import { doFormulario, paraFormulario, type ValoresForm } from './util';
 
 const ROTA = 'cadastros/filiais';
@@ -41,6 +41,7 @@ export function FilialForm() {
   const atual = id !== null && id === user?.filial_id;
 
   const salvar = async () => {
+    if (form.enviando || !confirmarDesativacao(registro, form.valores)) return;
     if (await form.enviar(() => cadastrosApi.filiais.salvar(id, doFormulario(form.valores)))) nav.voltar();
   };
   const excluir = async () => {
