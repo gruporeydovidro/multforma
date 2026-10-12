@@ -1,0 +1,70 @@
+object AcePreviewStatus: TAcePreviewStatus
+  Left = 518
+  Top = 195
+  Width = 309
+  Height = 130
+  HorzScrollBar.Visible = False
+  VertScrollBar.Visible = False
+  Caption = 'Printing'
+  Font.Color = clWindowText
+  Font.Height = -13
+  Font.Name = 'Arial'
+  Font.Style = []
+  PixelsPerInch = 96
+  Position = poScreenCenter
+  PrintScale = poNone
+  Scaled = False
+  OnCreate = FormCreate
+  TextHeight = 16
+  object Label1: TLabel
+    Left = 8
+    Top = 14
+    Width = 189
+    Height = 23
+    Caption = 'Printing, Please Wait.'
+    Font.Color = clWindowText
+    Font.Height = -20
+    Font.Name = 'Arial'
+    Font.Style = []
+    ParentFont = False
+  end
+  object lbPage: TLabel
+    Left = 12
+    Top = 54
+    Width = 61
+    Height = 19
+    Alignment = taRightJustify
+    AutoSize = False
+    Caption = 'Page:'
+    Font.Color = clBlack
+    Font.Height = -16
+    Font.Name = 'Arial'
+    Font.Style = [fsBold]
+    ParentFont = False
+  end
+  object AbortButton: TButton
+    Left = 184
+    Top = 44
+    Width = 89
+    Height = 33
+    Caption = 'Abort'
+    Default = True
+    TabOrder = 0
+    OnClick = AbortButtonClick
+  end
+  object pagenumber: TPanel
+    Left = 78
+    Top = 52
+    Width = 81
+    Height = 23
+    BevelOuter = bvNone
+    BevelWidth = 2
+    Caption = '1'
+    Font.Color = clWindowText
+    Font.Height = -17
+    Font.Name = 'Arial'
+    Font.Style = [fsBold]
+    ParentFont = False
+    TabOrder = 1
+  end
+end

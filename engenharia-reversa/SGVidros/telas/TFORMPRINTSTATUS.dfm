@@ -1,0 +1,102 @@
+object formPrintStatus: TformPrintStatus
+  Left = 175
+  Top = 258
+  BorderStyle = bsDialog
+  Caption = 'Print Status'
+  ClientHeight = 131
+  ClientWidth = 302
+  Color = clBtnFace
+  Font.Charset = DEFAULT_CHARSET
+  Font.Color = clWindowText
+  Font.Height = -13
+  Font.Name = 'Arial'
+  Font.Style = []
+  OldCreateOrder = True
+  Position = poScreenCenter
+  PrintScale = poNone
+  Scaled = False
+  Visible = True
+  OnClose = FormClose
+  OnCreate = FormCreate
+  OnShow = FormShow
+  PixelsPerInch = 96
+  TextHeight = 16
+  object Panel1: TPanel
+    Left = 0
+    Top = 0
+    Width = 302
+    Height = 131
+    Align = alClient
+    BevelInner = bvLowered
+    BevelWidth = 2
+    TabOrder = 0
+    object lbWait: TLabel
+      Left = 16
+      Top = 16
+      Width = 271
+      Height = 19
+      AutoSize = False
+      Caption = 'Imprimindo, aguarde...'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clBlack
+      Font.Height = -16
+      Font.Name = 'Arial'
+      Font.Style = [fsBold]
+      ParentFont = False
+    end
+    object lbPage: TLabel
+      Left = 28
+      Top = 60
+      Width = 59
+      Height = 19
+      Alignment = taRightJustify
+      Caption = 'P'#225'gina:'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clBlack
+      Font.Height = -16
+      Font.Name = 'Arial'
+      Font.Style = [fsBold]
+      ParentFont = False
+    end
+    object LoadMeter: TAceMeter
+      Left = 16
+      Top = 90
+      Width = 271
+      Height = 29
+      MeterColor = clRed
+      BackGroundColor = clWhite
+      BorderStyle = bsSingle
+      Style = msHorizontal
+      Min = 0
+      Max = 100
+      Progress = 0
+      ShowText = True
+    end
+    object abortbutton: TButton
+      Left = 180
+      Top = 50
+      Width = 109
+      Height = 33
+      Caption = 'Abortar'
+      Default = True
+      TabOrder = 0
+      OnClick = abortbuttonClick
+    end
+    object pagenumber: TPanel
+      Left = 92
+      Top = 58
+      Width = 81
+      Height = 23
+      BevelOuter = bvNone
+      BevelWidth = 2
+      Caption = '1'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -17
+      Font.Name = 'Arial'
+      Font.Style = [fsBold]
+      ParentFont = False
+      TabOrder = 1
+    end
+  end
+end
