@@ -10,13 +10,27 @@ export class OrigemLegado {
       connectionString: url,
       ssl: /sslmode=(require|verify-full|verify-ca)/.test(url) ? { rejectUnauthorized: true } : undefined,
       max: 2,
-      // Garante que nada seja escrito na origem, mesmo por engano.
-      options: `-c default_transaction_read_only=on -c search_path=${schema}`,
     });
   }
 
+  /**
+   * Cada consulta roda numa transação somente leitura com o search_path do schema de origem.
+   * SET LOCAL (em vez de parâmetros de conexão) funciona também no pooler do Neon (PgBouncer).
+   */
   async consultar<T extends pg.QueryResultRow = any>(sql: string, params: unknown[] = []): Promise<T[]> {
-    return (await this.pool.query<T>(sql, params)).rows;
+    const c = await this.pool.connect();
+    try {
+      await c.query('begin read only');
+      await c.query(`set local search_path to ${this.schema}`);
+      const r = await c.query<T>(sql, params);
+      await c.query('commit');
+      return r.rows;
+    } catch (e) {
+      await c.query('rollback').catch(() => undefined);
+      throw e;
+    } finally {
+      c.release();
+    }
   }
 
   /** Colunas existentes de uma tabela ou view (lidas do catálogo, independem de permissão). */
