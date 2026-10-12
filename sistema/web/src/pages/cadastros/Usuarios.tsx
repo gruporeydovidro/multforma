@@ -64,47 +64,47 @@ export function UsuarioForm() {
 
   return (
     <>
-    <FormularioCadastro
-      titulo={id ? registro?.nome ?? 'Carregando…' : 'Novo usuário'}
-      subtitulo={proprio ? 'Este é o seu usuário' : undefined}
-      form={form}
-      podeGravar
-      carregando={carregando}
-      onSalvar={salvar}
-      onExcluir={id && !proprio ? excluir : undefined}
-      onVoltar={nav.voltar}
-    >
-      {aviso && <Alert kind="success">{aviso}</Alert>}
-      <Card title="Acesso" actions={id && <button type="button" className="btn" onClick={() => setTrocandoSenha(true)}>Redefinir senha</button>}>
-        <div className="grid">
-          <Input label="Nome" className="col-6" required autoFocus {...form.campo('nome')} />
-          <Input label="Login" className="col-4" required autoComplete="off" hint="Minúsculas, sem espaços" {...form.campo('login')} />
-          <Checkbox label="Ativo" className="col-2" disabled={proprio} {...form.marca('ativo')} />
-          <Select label="Perfil" className="col-6" disabled={proprio} {...form.campo('perfil')}>
-            {Object.entries(PERFIS).map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-          </Select>
-          <Select label="Filial" className="col-6" {...form.campo('filial_id')}>
-            {filiais.data?.items.map((f) => <option key={f.id} value={f.id}>{f.nome}{!f.ativo && ' (inativa)'}</option>)}
-          </Select>
-          {id === null && (
-            <>
-              <Input label="Senha" className="col-6" type="password" autoComplete="new-password" required {...form.campo('senha')} />
-              <Input label="Confirmação da senha" className="col-6" type="password" autoComplete="new-password" required {...form.campo('confirmacao')} />
-            </>
-          )}
-        </div>
-      </Card>
-    </FormularioCadastro>
-    {id !== null && (
-      <RedefinirSenha
-        usuarioId={id}
-        aberto={trocandoSenha}
-        onFechar={(ok) => {
-          setTrocandoSenha(false);
-          if (ok) setAviso('Senha redefinida.');
-        }}
-      />
-    )}
+      <FormularioCadastro
+        titulo={id ? registro?.nome ?? 'Carregando…' : 'Novo usuário'}
+        subtitulo={proprio ? 'Este é o seu usuário' : undefined}
+        form={form}
+        podeGravar
+        carregando={carregando}
+        onSalvar={salvar}
+        onExcluir={id && !proprio ? excluir : undefined}
+        onVoltar={nav.voltar}
+      >
+        {aviso && <Alert kind="success">{aviso}</Alert>}
+        <Card title="Acesso" actions={id && <button type="button" className="btn" onClick={() => setTrocandoSenha(true)}>Redefinir senha</button>}>
+          <div className="grid">
+            <Input label="Nome" className="col-6" required autoFocus {...form.campo('nome')} />
+            <Input label="Login" className="col-4" required autoComplete="off" hint="Minúsculas, sem espaços" {...form.campo('login')} />
+            <Checkbox label="Ativo" className="col-2" disabled={proprio} {...form.marca('ativo')} />
+            <Select label="Perfil" className="col-6" disabled={proprio} {...form.campo('perfil')}>
+              {Object.entries(PERFIS).map(([v, r]) => <option key={v} value={v}>{r}</option>)}
+            </Select>
+            <Select label="Filial" className="col-6" {...form.campo('filial_id')}>
+              {filiais.data?.items.map((f) => <option key={f.id} value={f.id}>{f.nome}{!f.ativo && ' (inativa)'}</option>)}
+            </Select>
+            {id === null && (
+              <>
+                <Input label="Senha" className="col-6" type="password" autoComplete="new-password" required {...form.campo('senha')} />
+                <Input label="Confirmação da senha" className="col-6" type="password" autoComplete="new-password" required {...form.campo('confirmacao')} />
+              </>
+            )}
+          </div>
+        </Card>
+      </FormularioCadastro>
+      {id !== null && (
+        <RedefinirSenha
+          usuarioId={id}
+          aberto={trocandoSenha}
+          onFechar={(ok) => {
+            setTrocandoSenha(false);
+            if (ok) setAviso('Senha redefinida.');
+          }}
+        />
+      )}
     </>
   );
 }
