@@ -17,6 +17,8 @@ export function getPool(): pg.Pool {
     pool = new pg.Pool({
       connectionString,
       ssl: /sslmode=require/.test(connectionString) ? { rejectUnauthorized: true } : undefined,
+      // Datas derivadas de timestamptz (ex.: fechado_em::date, current_date) seguem o fuso da empresa.
+      options: `-c timezone=${process.env.TZ_EMPRESA ?? 'America/Sao_Paulo'}`,
     });
   }
   return pool;

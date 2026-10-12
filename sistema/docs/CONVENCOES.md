@@ -35,6 +35,10 @@ api/src/modules/<modulo>/
 - Pastas por módulo com separação: `pages/<modulo>/api.ts` (cliente tipado do módulo: funções/classe que encapsulam os endpoints e os tipos), componentes de tela em arquivos próprios, e hooks para estado de formulário/lista quando houver lógica. As telas não montam URLs nem fazem `fetch` diretamente: usam o `api.ts` do módulo.
 - Lógica de cálculo de exibição fica em funções puras testáveis, não dentro do JSX.
 
+## Núcleo compartilhado (use; não duplique)
+- API `src/shared/`: `numeros.ts` (`arredondar(v, casas)`, `arredondarDinheiro`), `validacao.ts` (`dataIso`, `milimetros`, `quantidade`, `valorNaoNegativo`), `pagamento.ts` (`FORMAS_PAGAMENTO`, `FORMAS_A_VISTA`), `contracts.ts` (portas).
+- Web `src/lib/`: `numero.ts` (`lerNumero`, parser pt-BR), `useEnvio.ts` (estado de envio com guarda contra duplo envio), `useFiltroUrl.ts` (filtros na query string), `useAsync.ts` (descarta respostas fora de ordem), `periodo.ts`, `csv.ts`, `format.ts` (datas locais). Componentes: `components/ui.tsx`, `PeriodoFiltro`, `Indicador`, `AcoesRelatorio`.
+
 ## API
 - Cada módulo é um plugin em `api/src/modules/<modulo>/routes.ts`, montado em `/api/<modulo>` (registro em `api/src/modules/index.ts`, já feito).
 - Toda rota exige sessão, exceto as marcadas com `config: { public: true }`. O usuário está em `req.user` (`{ id, nome, login, perfil, filial_id }`).
