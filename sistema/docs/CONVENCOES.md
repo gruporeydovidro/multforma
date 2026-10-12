@@ -11,6 +11,30 @@
 - Testes da API: `cd api && npx vitest run test/<arquivo>.test.ts`. Typecheck: `cd api && npx tsc --noEmit` e `cd web && npx tsc -b --noEmit`.
 - Os testes compartilham o banco `vidrogest_test` e rodam em série. `useTestApp()` (em `api/test/helpers.ts`) recria o banco e aplica o seed no início de cada arquivo.
 
+## Arquitetura (obrigatória): orientação a objetos, baixo acoplamento e alta coesão
+
+### API: camadas por módulo
+```
+api/src/modules/<modulo>/
+  domain/            entidades e objetos de valor PUROS (sem banco nem HTTP), com as regras de negócio
+                     ex.: Medida, ItemOrcamento, CalculadoraItem, AvaliadorFormula, OrdemProducao.avancar()
+  <entidade>.repository.ts   classe XRepository: só acesso a dados (SQL parametrizado); recebe `db: Db` no construtor
+  <entidade>.service.ts      classe XService: casos de uso; orquestra domain e repositórios; sem HTTP
+  <modulo>.schemas.ts        schemas Zod de entrada (validação na borda)
+  routes.ts                  adaptador HTTP fino: valida, chama o service, devolve a resposta
+```
+- **Responsabilidade única:** routes não contém SQL nem regra de negócio; repository não contém regra; domain não conhece banco.
+- **Injeção de dependência pelo construtor.** Services recebem repositórios e portas; nada de `new` de dependências de outro módulo dentro de um service.
+- **Transações:** o service abre `withTx(async (db) => …)` e cria os repositórios com o `db` da transação (`new XRepository(db)`), ou recebe uma fábrica de repositórios. Fora de transação, use `getPool()`.
+- **Entre módulos, só por portas** (`api/src/shared/contracts.ts`: `EstoquePort`, `FinanceiroPort`, `ProducaoPort`). Um módulo nunca importa classes, repositórios ou services de outro módulo. Ler tabelas de outro módulo via SQL só é aceitável em consultas/relatórios (somente leitura) no seu próprio repository.
+- **Composição:** `api/src/composition.ts` é a raiz de composição e o único lugar que instancia as implementações das portas. Todo plugin recebe `opts.ports` (tipo `ModuloOptions`), em `export default async function xRoutes(app: FastifyInstance, opts: ModuloOptions)`.
+- Prefira classes pequenas e coesas, métodos curtos e nomes do domínio em português. Erros de regra de negócio: lance `HttpError`/`badRequest`/`conflict` a partir do service (ou erros de domínio próprios, convertidos no service).
+- Testes: o domain é testado unitariamente sem banco; os services e as rotas, via `app.inject`.
+
+### Web
+- Pastas por módulo com separação: `pages/<modulo>/api.ts` (cliente tipado do módulo: funções/classe que encapsulam os endpoints e os tipos), componentes de tela em arquivos próprios, e hooks para estado de formulário/lista quando houver lógica. As telas não montam URLs nem fazem `fetch` diretamente: usam o `api.ts` do módulo.
+- Lógica de cálculo de exibição fica em funções puras testáveis, não dentro do JSX.
+
 ## API
 - Cada módulo é um plugin em `api/src/modules/<modulo>/routes.ts`, montado em `/api/<modulo>` (registro em `api/src/modules/index.ts`, já feito).
 - Toda rota exige sessão, exceto as marcadas com `config: { public: true }`. O usuário está em `req.user` (`{ id, nome, login, perfil, filial_id }`).
@@ -29,10 +53,9 @@
 - Numeração por filial: `proximoNumero(client, 'orcamento' | 'ordem_producao', filialId)` dentro de `withTx`.
 
 ### Contratos entre módulos (já implementados; use, não duplique)
-- `modules/estoque/service.ts`: `registrarMovimento(db, {...})` e `saldo(db, filialId, produtoId)`.
-- `modules/financeiro/service.ts`: `gerarContasReceber(db, {...})` e `baixarContaReceber(db, {...})`.
-- `modules/producao/service.ts`: `criarOrdemProducao(db, orcamentoId)`.
-- Quem é dono desses arquivos pode melhorá-los, sem mudar as assinaturas.
+- Interfaces em `api/src/shared/contracts.ts` (`EstoquePort`, `FinanceiroPort`, `ProducaoPort`); implementações ligadas em `api/src/composition.ts` e entregues aos plugins em `opts.ports`.
+- Implementação inicial (funções) em `modules/{estoque,financeiro,producao}/service.ts`. Os donos desses módulos devem convertê-las em classes que implementam a porta (ex.: `class EstoqueService implements EstoquePort`) e trocar a linha correspondente em `composition.ts`.
+- Quem consome (ex.: Orçamentos) usa apenas `opts.ports`, nunca importa esses arquivos.
 
 ### Endpoints de cadastro que outros módulos consomem (dono: Cadastros)
 - `GET /api/cadastros/pessoas?q=&tipo=cliente|fornecedor&page=&pageSize=` → `{ items: [{ id, nome, fantasia, cpf_cnpj, tipo, telefone, cidade, uf, ativo }], ... }`. `tipo=cliente` inclui `ambos`; o mesmo vale para `fornecedor`.
