@@ -32,6 +32,9 @@ Em produção a API serve o front-end compilado (`web/dist`) na mesma porta. As 
 
 **Neon (PostgreSQL gerenciado):** use a connection string do Neon com `?sslmode=require` em `DATABASE_URL`.
 
+## Importar os dados do sistema anterior
+Veja [`docs/IMPORTACAO.md`](docs/IMPORTACAO.md): `npm run importar -- --verificar` (só lê) e `npm run importar`.
+
 ## Testes
 ```bash
 cd api && npx vitest run         # usa postgres://postgres@127.0.0.1:5433/vidrogest_test (ou TEST_DATABASE_URL)
