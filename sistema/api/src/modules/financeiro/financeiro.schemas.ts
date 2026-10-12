@@ -3,17 +3,12 @@ import { listQuery } from '../../lib/paging.js';
 import { Dinheiro } from './domain/dinheiro.js';
 import { GeradorParcelas } from './domain/gerador-parcelas.js';
 
-export const FORMAS_PAGAMENTO = ['dinheiro', 'pix', 'cartao_debito', 'cartao_credito', 'boleto', 'cheque', 'a_prazo'] as const;
+import { FORMAS_PAGAMENTO } from '../../shared/pagamento.js';
+import { dataIso } from '../../shared/validacao.js';
+
+export { FORMAS_PAGAMENTO, dataIso };
 export const formaPagamento = z.enum(FORMAS_PAGAMENTO);
 
-/** Data 'YYYY-MM-DD' existente no calendário. */
-export const dataIso = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data deve estar no formato AAAA-MM-DD')
-  .refine((s) => {
-    const d = new Date(`${s}T00:00:00Z`);
-    return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(s);
-  }, 'Data inválida');
 
 /** Valor monetário positivo, arredondado a 2 casas. */
 export const valorMonetario = z.coerce.number().positive('Valor deve ser maior que zero').max(999_999_999_999).transform(Dinheiro.arredondar);

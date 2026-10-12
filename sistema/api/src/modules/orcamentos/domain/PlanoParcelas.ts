@@ -1,11 +1,9 @@
 import { RegraOrcamentoError } from './erros.js';
 import { round2, valoresIguais } from './numeros.js';
 
-export const FORMAS_PAGAMENTO = ['dinheiro', 'pix', 'cartao_debito', 'cartao_credito', 'boleto', 'cheque', 'a_prazo'] as const;
-export type FormaPagamento = (typeof FORMAS_PAGAMENTO)[number];
+import { FORMAS_A_VISTA, FORMAS_PAGAMENTO, type FormaPagamento } from '../../../shared/pagamento.js';
 
-/** Formas liquidadas no ato do fechamento. */
-export const FORMAS_A_VISTA: readonly FormaPagamento[] = ['dinheiro', 'pix', 'cartao_debito'];
+export { FORMAS_A_VISTA, FORMAS_PAGAMENTO, type FormaPagamento };
 
 export interface Parcela {
   numero: number;

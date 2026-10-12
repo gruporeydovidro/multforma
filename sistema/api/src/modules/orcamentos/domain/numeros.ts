@@ -1,8 +1,4 @@
-/** Arredondamento decimal "meio para cima", à prova de imprecisão binária (1.005 -> 1.01). */
-function arredondar(v: number, casas: number): number {
-  const f = 10 ** casas;
-  return Math.round((v + Math.sign(v) * Number.EPSILON) * f) / f;
-}
+import { arredondar } from '../../../shared/numeros.js';
 
 /** Dinheiro: 2 casas. */
 export const round2 = (v: number): number => arredondar(Number(v), 2);

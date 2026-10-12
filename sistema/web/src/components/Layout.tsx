@@ -1,21 +1,15 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { can, useAuth } from '../lib/auth';
-import { modules } from '../pages/modules';
+import { menuMaisProximo, type ModuleDef } from '../lib/module';
 
-/** Item do menu ativo: o de caminho mais longo que é prefixo da URL atual. */
+/** Caminho absoluto para o link (os módulos podem registrar com ou sem a barra inicial). */
 const absoluto = (p: string) => (p.startsWith('/') ? p : `/${p}`);
 
-function caminhoAtivo(pathname: string, paths: string[]): string | undefined {
-  return paths
-    .map(absoluto)
-    .filter((p) => (p === '/' ? pathname === '/' : pathname === p || pathname.startsWith(`${p}/`)))
-    .sort((a, b) => b.length - a.length)[0];
-}
-
-export function Layout() {
+/** Casca da aplicação: menu lateral montado a partir dos módulos recebidos. */
+export function Layout({ modules }: { modules: ModuleDef[] }) {
   const { user, logout } = useAuth();
   const { pathname } = useLocation();
-  const ativo = caminhoAtivo(pathname, modules.flatMap((m) => m.menu.map((i) => i.path)));
+  const ativo = menuMaisProximo(pathname, modules.flatMap((m) => m.menu))?.path;
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -28,7 +22,7 @@ export function Layout() {
               <div key={m.titulo} className="nav-group">
                 <div className="nav-title">{m.titulo}</div>
                 {items.map((i) => (
-                  <Link key={i.path} to={absoluto(i.path)} className={absoluto(i.path) === ativo ? 'active' : ''}>
+                  <Link key={i.path} to={absoluto(i.path)} className={i.path === ativo ? 'active' : ''}>
                     {i.label}
                   </Link>
                 ))}

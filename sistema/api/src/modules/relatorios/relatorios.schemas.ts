@@ -1,13 +1,6 @@
 import { z } from 'zod';
 
-/** Data 'YYYY-MM-DD' existente no calendário. */
-const dataIso = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data deve estar no formato AAAA-MM-DD')
-  .refine((s) => {
-    const d = new Date(`${s}T00:00:00Z`);
-    return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(s);
-  }, 'Data inválida');
+import { dataIso } from '../../shared/validacao.js';
 
 export const periodoQuery = z.object({ de: dataIso.optional(), ate: dataIso.optional() });
 

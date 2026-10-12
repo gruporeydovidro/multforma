@@ -1,5 +1,6 @@
+import { arredondarDinheiro } from '../../../shared/numeros.js';
 /** Arredonda a 2 casas (meio para longe do zero, corrigindo o erro binário). */
-export const round2 = (v: number) => (Math.sign(v) * Math.round(Math.abs(v) * 100 * (1 + 2 * Number.EPSILON))) / 100 || 0;
+export const round2 = arredondarDinheiro;
 
 /** parte / todo em %, com 2 casas (0 quando todo = 0). */
 export function percentual(parte: number, todo: number): number {

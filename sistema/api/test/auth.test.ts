@@ -37,3 +37,31 @@ describe('sessão de usuário desativado', () => {
     expect((await t.app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } })).statusCode).toBe(401);
   });
 });
+
+describe('segurança da sessão', () => {
+  const t = useTestApp();
+
+  it('não aceita contornar a autenticação codificando a URL', async () => {
+    for (const url of ['/%61pi/cadastros/pessoas', '/%61pi/cadastros/produtos', '/%61pi/projetos', '/api/cadastros/%70essoas']) {
+      const res = await t.app.inject({ method: 'GET', url });
+      expect(res.statusCode, url).toBe(401);
+    }
+  });
+
+  it('aplica na hora a mudança de perfil e de filial', async () => {
+    const cookie = await login(t.app, 'financeiro');
+    expect((await t.app.inject({ method: 'GET', url: '/api/financeiro/receber', headers: { cookie } })).statusCode).toBe(200);
+    await query("insert into filial (nome) values ('Filial 2')");
+    await query("update usuario set perfil = 'producao', filial_id = (select max(id) from filial) where login = 'teste_financeiro'");
+    expect((await t.app.inject({ method: 'GET', url: '/api/financeiro/receber', headers: { cookie } })).statusCode).toBe(403);
+    const me = (await t.app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } })).json().user;
+    expect(me.perfil).toBe('producao');
+    expect(me.filial_id).toBeGreaterThan(1);
+  });
+
+  it('bloqueia o login após 5 senhas erradas', async () => {
+    const tentar = (senha: string) => t.app.inject({ method: 'POST', url: '/api/auth/login', payload: { login: 'admin', senha }, remoteAddress: '10.9.9.9' });
+    for (let i = 0; i < 5; i++) expect((await tentar('errada')).statusCode).toBe(401);
+    expect((await tentar('admin123')).statusCode).toBe(429);
+  });
+});

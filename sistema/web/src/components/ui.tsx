@@ -158,6 +158,8 @@ export function SearchBox({ value, onChange, placeholder = 'Pesquisar…' }: { v
   const [v, setV] = useState(value);
   const t = useRef<number>();
   useEffect(() => setV(value), [value]);
+  // Sem isso, o timer pendente dispara depois que o usuário já saiu da lista e o leva de volta a ela.
+  useEffect(() => () => window.clearTimeout(t.current), []);
   return (
     <input
       className="search"
@@ -177,8 +179,10 @@ export interface Option { value: number; label: string }
 /**
  * Seleção com busca no servidor. fetchOptions recebe o texto digitado.
  * value/onChange trabalham com o id; initialLabel mostra o rótulo do valor atual.
+ * Texto digitado sem escolher uma opção não conta como seleção: o valor vira null e,
+ * ao sair do campo, o rótulo volta ao da seleção atual.
  */
-export function AsyncSelect({ label, value, onChange, fetchOptions, initialLabel, placeholder = 'Digite para buscar…', error, className }: {
+export function AsyncSelect({ label, value, onChange, fetchOptions, initialLabel, placeholder = 'Digite para buscar…', error, className, disabled }: {
   label: string;
   value: number | null;
   onChange: (value: number | null, option?: Option) => void;
@@ -187,29 +191,60 @@ export function AsyncSelect({ label, value, onChange, fetchOptions, initialLabel
   placeholder?: string;
   error?: string;
   className?: string;
+  disabled?: boolean;
 }) {
   const [text, setText] = useState(initialLabel ?? '');
+  const [selecionado, setSelecionado] = useState(initialLabel ?? '');
   const [opts, setOpts] = useState<Option[]>([]);
   const [open, setOpen] = useState(false);
   const t = useRef<number>();
-  useEffect(() => setText(initialLabel ?? ''), [initialLabel]);
+  const seq = useRef(0);
+  useEffect(() => {
+    setText(initialLabel ?? '');
+    setSelecionado(initialLabel ?? '');
+  }, [initialLabel]);
+  useEffect(() => () => window.clearTimeout(t.current), []);
   const search = (q: string) => {
     window.clearTimeout(t.current);
-    t.current = window.setTimeout(() => fetchOptions(q).then(setOpts).catch(() => setOpts([])), 250);
+    const minha = ++seq.current;
+    t.current = window.setTimeout(() => {
+      // Descarta respostas fora de ordem: só a última busca atualiza a lista.
+      fetchOptions(q)
+        .then((o) => minha === seq.current && setOpts(o))
+        .catch(() => minha === seq.current && setOpts([]));
+    }, 250);
+  };
+  const escolher = (o: Option) => {
+    onChange(o.value, o);
+    setText(o.label);
+    setSelecionado(o.label);
+    setOpen(false);
   };
   return (
     <Field label={label} error={error} className={`async-select ${className ?? ''}`}>
       <input
         value={text}
         placeholder={placeholder}
-        onFocus={() => { setOpen(true); search(text === initialLabel ? '' : text); }}
-        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
-        onChange={(e) => { setText(e.target.value); setOpen(true); search(e.target.value); if (!e.target.value) onChange(null); }}
+        disabled={disabled}
+        onFocus={() => { setOpen(true); search(text === selecionado ? '' : text); }}
+        onBlur={() => window.setTimeout(() => {
+          setOpen(false);
+          if (value !== null) setText(selecionado);
+        }, 150)}
+        onChange={(e) => {
+          setText(e.target.value);
+          setOpen(true);
+          search(e.target.value);
+          if (value !== null && e.target.value !== selecionado) {
+            onChange(null);
+            setSelecionado('');
+          }
+        }}
       />
       {open && opts.length > 0 && (
         <ul className="dropdown">
           {opts.map((o) => (
-            <li key={o.value} onMouseDown={() => { onChange(o.value, o); setText(o.label); setOpen(false); }} className={o.value === value ? 'active' : ''}>
+            <li key={o.value} onMouseDown={() => escolher(o)} className={o.value === value ? 'active' : ''}>
               {o.label}
             </li>
           ))}

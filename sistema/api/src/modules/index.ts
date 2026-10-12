@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { criarPorts } from '../composition.js';
+import type { AuthService } from './auth/auth.service.js';
 import auth from './auth/routes.js';
 import cadastros from './cadastros/routes.js';
 import projetos from './projetos/routes.js';
@@ -10,9 +11,9 @@ import financeiro from './financeiro/routes.js';
 import relatorios from './relatorios/routes.js';
 
 /** Cada módulo é um plugin Fastify montado em /api/<prefixo>; recebe as portas em opts.ports. */
-export async function registerModules(app: FastifyInstance) {
+export async function registerModules(app: FastifyInstance, deps: { auth: AuthService }) {
   const ports = criarPorts();
-  await app.register(auth, { prefix: '/api/auth' });
+  await app.register(auth, { prefix: '/api/auth', auth: deps.auth });
   await app.register(cadastros, { prefix: '/api/cadastros', ports });
   await app.register(projetos, { prefix: '/api/projetos', ports });
   await app.register(orcamentos, { prefix: '/api/orcamentos', ports });

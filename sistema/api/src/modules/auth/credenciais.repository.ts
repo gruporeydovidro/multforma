@@ -22,8 +22,8 @@ export class CredenciaisRepository {
     );
   }
 
-  async estaAtivo(id: number): Promise<boolean> {
-    const r = await queryOne<{ ativo: boolean }>('select ativo from usuario where id = $1', [id], this.db);
-    return r?.ativo === true;
+  /** Dados atuais do usuário ativo (perfil e filial podem ter mudado depois do login). */
+  buscarAtivoPorId(id: number): Promise<Omit<CredencialUsuario, 'senha_hash'> | undefined> {
+    return queryOne('select id, nome, login, perfil, filial_id from usuario where id = $1 and ativo', [id], this.db);
   }
 }

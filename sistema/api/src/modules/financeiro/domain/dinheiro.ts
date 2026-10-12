@@ -1,3 +1,5 @@
+import { arredondarDinheiro } from '../../../shared/numeros.js';
+
 /** Regras de valores monetários: sempre 2 casas decimais. */
 export class Dinheiro {
   /** Tolerância de comparação (meio centavo). */
@@ -7,8 +9,7 @@ export class Dinheiro {
 
   /** Arredondamento comercial (meio para longe do zero), corrigindo o erro binário (1.005 -> 1.01). */
   static arredondar(v: number): number {
-    const r = (Math.sign(v) * Math.round(Math.abs(v) * 100 * (1 + 2 * Number.EPSILON))) / 100;
-    return r === 0 ? 0 : r;
+    return arredondarDinheiro(v);
   }
 
   static somar(valores: Iterable<number>): number {
