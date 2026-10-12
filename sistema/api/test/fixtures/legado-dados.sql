@@ -17,8 +17,10 @@ insert into grupo (cd_grupo, nm_grupo, qt_areaminima) values (1, 'Vidros', 0.25)
 insert into arredondamento (cd_arredondamento, ds_arredondamento, vl_arredondamento) values (1, '5 cm', 5), (2, 'Zerado', 0);
 insert into produto_tblpreco (cd_tabela, ds_tabela, fl_ativa) values ('001', 'Padrão', '1'), ('002', 'Atacado', '0');
 insert into produto (cd_produto, nm_produto, fl_produto, cd_grupo, sg_venda, cd_arredondamento, fl_ativo, qt_est_minimo, cd_emitente) values
-  (100, 'VIDRO TEMPERADO 8MM', '1', 1, 'MT', 1, '1', 10, 12),
+  (100, 'VIDRO TEMPERADO 8MM', '1', 1, 'M2', 1, '1', 10, 12),
   (101, 'INSTALAÇÃO', '2', null, 'UN', null, '1', 0, null),
+  (103, 'PERFIL ALUMÍNIO', '1', 2, 'MT', null, '1', 0, null),
+  (104, 'PUXADOR', '1', 2, 'PÇ', null, '1', 0, null),
   (102, 'KIT BOX', '1', 2, 'UN', null, '0', 0, null);
 insert into produto_preco (cd_tabela, cd_produto, vl_venda, vl_custo) values
   ('001', 100, 300, 120), ('002', 100, 270, 120), ('001', 101, 150, 0), ('001', 102, 200, 90), ('001', 999, 10, 1);
@@ -41,8 +43,8 @@ insert into orcamento (cd_filial, nr_orcamento, dt_emissao, st_orcamento, dt_can
   (1, 3, now() - interval '8 years', '1', null, 11, 1, '001', '1', 0, 0, 15, '0', null),
   (1, 4, now() - interval '8 years', '1', now() - interval '8 years', 11, 1, '001', '1', 0, 0, 15, '0', null);
 insert into orcamento_item (cd_filial, nr_orcamento, nr_item, cd_produto, nm_produto, sg_unidade, qt_item, vl_unitario, ds_ambiente) values
-  (1, 1, 1, 100, 'VIDRO TEMPERADO 8MM', 'MT', 1.5, 300, 'Sala'),
-  (1, 2, 1, 100, 'VIDRO TEMPERADO 8MM', 'MT', 2.563, 300, 'Banheiro'),
+  (1, 1, 1, 100, 'VIDRO TEMPERADO 8MM', 'M2', 1.5, 300, 'Sala'),
+  (1, 2, 1, 100, 'VIDRO TEMPERADO 8MM', 'M2', 2.563, 300, 'Banheiro'),
   (1, 2, 2, 101, 'INSTALAÇÃO', 'UN', 1, 150, null),
   (1, 2, 3, 555, 'PRODUTO APAGADO', 'UN', 2, 10, null),
   (1, 3, 1, 102, 'KIT BOX', 'UN', 1, 200, null),

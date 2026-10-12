@@ -1,5 +1,5 @@
 import type { ContextoImportacao, Etapa } from './contexto.js';
-import { formula, statusOrcamento } from './conversores.js';
+import { formula, statusOrcamento, unidadeVenda } from './conversores.js';
 import { ArredondamentosEtapa, FiliaisEtapa, GruposEtapa, TabelasPrecoEtapa } from './etapas/cadastros-basicos.js';
 import { CaixaEtapa, ContasPagarEtapa, ContasReceberEtapa } from './etapas/financeiro.js';
 import { OrcamentosEtapa } from './etapas/orcamentos.js';
@@ -88,13 +88,13 @@ export class Importador {
     ];
     if (opcoes.escopo !== 'cadastros') {
       contagens.push(
-        ['Orçamentos', `select count(*) n from orcamento o ${recente ? `where o.dt_emissao >= $1::date or (o.dt_cancelamento is null and coalesce(o.st_orcamento,'') not in ('9','2','5'))` : ''}`, recente ? [opcoes.desde] : []],
+        ['Orçamentos', `select count(*) n from orcamento o ${recente ? 'where o.dt_emissao >= $1::date' : ''}`, recente ? [opcoes.desde] : []],
         ['Parcelas a receber', `select count(*) n from receber_parcela p join receber r using (cd_filial, nr_receber) ${recente ? 'where r.dt_emissao >= $1::date or (r.dt_cancelamento is null and coalesce(p.vl_recebido,0) < p.vl_parcela)' : ''}`, recente ? [opcoes.desde] : []],
         ['Parcelas a pagar', `select count(*) n from pagar_parcela p join pagar g using (cd_filial, nr_pagar) ${recente ? 'where g.dt_emissao >= $1::date or (g.dt_cancelamento is null and coalesce(p.vl_pago,0) < p.vl_parcela)' : ''}`, recente ? [opcoes.desde] : []],
         ['Lançamentos de caixa', `select count(*) n from caixa ${recente ? 'where dt_lancamento >= $1::date' : ''}`, recente ? [opcoes.desde] : []],
       );
     }
-    out.push(`Escopo: ${opcoes.escopo}${recente ? ` (desde ${opcoes.desde}, mais o que está em aberto)` : ''}`);
+    out.push(`Escopo: ${opcoes.escopo}${recente ? ` (orçamentos e caixa desde ${opcoes.desde}; contas a receber/pagar desde essa data ou ainda em aberto)` : ''}`);
     for (const [nome, sql, params] of contagens) out.push(`  ${nome.padEnd(24)} ${(await um(sql, params)).n}`);
 
     out.push('', 'Situação dos orçamentos (código → como será importado):');
@@ -103,15 +103,30 @@ export class Importador {
     }
     out.push('', 'Tipo de produto (fl_produto):');
     for (const r of await origem.consultar(`select fl_produto, count(*) n from produto group by 1 order by 1`)) out.push(`  '${r.fl_produto ?? ''}': ${r.n}`);
-    out.push('', 'Unidade de venda (sg_venda):');
-    for (const r of await origem.consultar(`select sg_venda, count(*) n from produto group by 1 order by 2 desc`)) out.push(`  '${r.sg_venda ?? ''}': ${r.n}`);
-    out.push('', 'Fórmulas de projeto (amostra) → convertida:');
+    out.push('', 'Unidade de venda (sg_venda → unidade no VidroGest; exemplos de produtos):');
+    for (const r of await origem.consultar(
+      `select sg_venda, count(*) n, (array_agg(nm_produto order by cd_produto))[1:4] exemplos from produto group by 1 order by 2 desc`,
+    )) {
+      out.push(`  '${r.sg_venda ?? ''}': ${r.n} → ${unidadeVenda(r.sg_venda)}   ex.: ${(r.exemplos ?? []).map((x: string) => String(x).trim()).join(' | ')}`);
+    }
     const formulas = await origem.consultar(
-      `select f, count(*) n from (select ds_form_largura f from projeto_item union all select ds_form_altura from projeto_item) x where coalesce(trim(f), '') <> '' group by f order by 2 desc limit 15`,
+      `select f, count(*) n from (select ds_form_largura f from projeto_item union all select ds_form_altura from projeto_item) x where coalesce(trim(f), '') <> '' group by f order by 2 desc`,
     );
-    for (const r of formulas) {
-      const c = formula(r.f);
-      out.push(`  "${r.f}" (${r.n}x) → ${c.texto ?? `NÃO CONVERTIDA: ${c.aviso}`}`);
+    const invalidas = formulas.filter((r) => !formula(r.f).texto);
+    const usos = (l: any[]) => l.reduce((t, r) => t + Number(r.n), 0);
+    out.push('', `Fórmulas de projeto: ${usos(formulas) - usos(invalidas)} de ${usos(formulas)} usos convertidos; não convertidas (${invalidas.length} distintas):`);
+    for (const r of invalidas.slice(0, 25)) out.push(`  "${r.f}" (${r.n}x)`);
+    out.push('', 'Itens de projeto que usam fórmulas não convertidas (exemplos):');
+    for (const r of await origem.consultar(
+      `select p.nm_projeto, i.nr_item, coalesce(pc.ds_peca, pt.ds_parte, pr.nm_produto) as descricao, i.ds_form_largura, i.ds_form_altura
+         from projeto_item i join projeto p on p.cd_projeto = i.cd_projeto
+         left join projeto_peca pc on pc.cd_peca = i.cd_peca left join projeto_parte pt on pt.cd_parte = i.cd_parte
+         left join produto pr on pr.cd_produto = i.cd_produto
+        where i.ds_form_largura = any($1::text[]) or i.ds_form_altura = any($1::text[])
+        order by p.nm_projeto, i.nr_item limit 15`,
+      [invalidas.map((r) => r.f)],
+    )) {
+      out.push(`  ${String(r.nm_projeto).trim()} #${r.nr_item} ${String(r.descricao ?? '').trim()}: largura "${r.ds_form_largura ?? ''}", altura "${r.ds_form_altura ?? ''}"`);
     }
     return { ok, texto: out.join('\n') };
   }

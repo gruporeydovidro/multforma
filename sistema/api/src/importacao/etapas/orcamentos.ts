@@ -4,10 +4,10 @@ import { dia, formaOrcamento, formaPortador, somarDias, statusOrcamento, texto, 
 import { r2, r4 } from '../opcoes.js';
 import { EtapaPorLote, type Conversao, type ConsultaOrigem } from './base.js';
 
-const FECHADOS = `('9', '2', '5')`;
-
 /**
- * Orçamentos com itens e parcelas. Mantém o número original por filial; os totais vêm das views de total
+ * Orçamentos com itens e parcelas. No escopo recente, só os emitidos desde o corte (as propostas antigas
+ * nunca fechadas, situação '1', não são trazidas).
+ * Mantém o número original por filial; os totais vêm das views de total
  * do sistema anterior. Itens de produtos que não existem mais apontam para o produto "Item do sistema anterior".
  * As medidas (largura/altura) não são importadas: o histórico guarda a medida cobrada e o valor.
  */
@@ -44,7 +44,7 @@ export class OrcamentosEtapa extends EtapaPorLote<any> {
                    o.dt_confirmado, o.dt_fatura, o.fl_producao, t.vl_orcamento
               from orcamento o
               left join orcamento_total t on t.cd_filial = o.cd_filial and t.nr_orcamento = o.nr_orcamento
-             ${recente ? `where o.dt_emissao >= $1::date or (o.dt_cancelamento is null and coalesce(o.st_orcamento, '') not in ${FECHADOS})` : ''}`,
+             ${recente ? 'where o.dt_emissao >= $1::date' : ''}`,
       chave: ['cd_filial', 'nr_orcamento'],
       params: recente ? [ctx.opcoes.desde] : [],
     };

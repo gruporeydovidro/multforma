@@ -64,14 +64,16 @@ export function cep(v: unknown): string | null {
 /** tp_pessoa: 1 = física, 2 = jurídica. */
 export const natureza = (v: unknown): 'F' | 'J' => (String(v ?? '').trim() === '2' ? 'J' : 'F');
 
-/** Unidade de venda do legado (MT = metro quadrado no vidro, PC, UN) para a do VidroGest. */
-export function unidadeVenda(v: unknown): 'M2' | 'ML' | 'UN' | 'PC' | 'KG' {
-  const u = String(v ?? '').trim().toUpperCase();
-  if (u === 'MT' || u === 'M2') return 'M2';
-  if (u === 'ML') return 'ML';
-  if (u === 'PC') return 'PC';
-  if (u === 'KG') return 'KG';
-  return 'UN';
+export type UnidadeVidroGest = 'M2' | 'ML' | 'UN' | 'PC' | 'KG';
+
+/**
+ * Unidade de venda do sistema anterior para a do VidroGest. M2 = área; MT/ML = metro linear (o legado tem M2 separado);
+ * PÇ/PC = peça; demais (CE, CJ, CX, PR...) = unidade. Ajustável em UNIDADES_LEGADO.
+ */
+export const UNIDADES_LEGADO: Record<string, UnidadeVidroGest> = { M2: 'M2', MT: 'ML', ML: 'ML', PC: 'PC', 'PÇ': 'PC', KG: 'KG', UN: 'UN' };
+
+export function unidadeVenda(v: unknown): UnidadeVidroGest {
+  return UNIDADES_LEGADO[String(v ?? '').trim().toUpperCase()] ?? 'UN';
 }
 
 export type StatusOrcamento = 'aberto' | 'aprovado' | 'fechado' | 'cancelado';

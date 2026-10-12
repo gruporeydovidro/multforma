@@ -121,10 +121,10 @@ describe('importação do sistema anterior (escopo recente)', () => {
     expect(m).toEqual([{ quantidade: 12.5, documento: 'SALDO INICIAL' }]);
   });
 
-  it('no escopo recente traz orçamentos recentes e os em aberto, com totais coerentes', async () => {
+  it('no escopo recente traz só os orçamentos do período, com totais coerentes', async () => {
     const o = await query(`select numero, status, subtotal, desconto_valor, acrescimo_valor, frete_valor, total, forma_pagamento, destino
                              from orcamento order by numero`);
-    expect(o.map((x) => [x.numero, x.status])).toEqual([[2, 'fechado'], [3, 'aberto']]);
+    expect(o.map((x) => [x.numero, x.status])).toEqual([[2, 'fechado']]);
     const o2 = o[0];
     expect(o2).toMatchObject({ subtotal: 938.9, frete_valor: 20, total: 950, forma_pagamento: 'a_prazo', destino: 'producao' });
     expect(o2.subtotal - o2.desconto_valor + o2.acrescimo_valor + o2.frete_valor).toBeCloseTo(o2.total, 2);
@@ -179,7 +179,9 @@ describe('importação do sistema anterior (escopo recente)', () => {
     await origem.fechar();
     expect(r.ok).toBe(true);
     expect(r.texto).toMatch(/Estrutura da origem: OK/);
-    expect(r.texto).toMatch(/"LARGURA\/2\+25".*→ L\/2\+25/);
+    expect(r.texto).toMatch(/Fórmulas de projeto: 3 de 4 usos convertidos/);
+    expect(r.texto).toMatch(/"L\*\(1,5" \(1x\)/);
+    expect(r.texto).toMatch(/'MT'.*→ ML|'PÇ'.*→ PC/);
     expect(await contar('orcamento')).toBe(antes);
   });
 });
