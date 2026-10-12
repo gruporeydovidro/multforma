@@ -61,6 +61,24 @@ export class Importador {
     }
   }
 
+  /** Só leitura: produtos de uma unidade de venda do sistema anterior (para decidir a conversão). */
+  async listarUnidade(sigla: string): Promise<string> {
+    const rows = await this.ctx.origem.consultar(
+      `select p.cd_produto, p.nm_produto, g.nm_grupo, pp.vl_venda,
+              (select count(*) from orcamento_item i where i.cd_produto = p.cd_produto) as usos
+         from produto p left join grupo g on g.cd_grupo = p.cd_grupo
+         left join lateral (select vl_venda from produto_preco x where x.cd_produto = p.cd_produto order by x.cd_tabela limit 1) pp on true
+        where upper(trim(p.sg_venda)) = upper(trim($1))
+        order by usos desc, p.nm_produto limit 40`,
+      [sigla],
+    );
+    const out = [`Produtos com unidade '${sigla}' (os 40 mais usados em orçamentos):`, 'Código   Produto                                        Grupo                 Preço      Usos'];
+    for (const r of rows) {
+      out.push(`${String(r.cd_produto).padEnd(8)} ${String(r.nm_produto ?? '').trim().slice(0, 46).padEnd(46)} ${String(r.nm_grupo ?? '').trim().slice(0, 20).padEnd(20)} ${Number(r.vl_venda ?? 0).toFixed(2).padStart(10)} ${String(r.usos).padStart(6)}`);
+    }
+    return out.join('\n');
+  }
+
   /** Só leitura: confere a estrutura da origem e mostra o que seria importado. Não grava nada. */
   async verificar(): Promise<{ ok: boolean; texto: string }> {
     const { origem, opcoes } = this.ctx;

@@ -1,4 +1,4 @@
-// Uso: npm run importar -- [--verificar] [--escopo=recente|tudo|cadastros] [--desde=AAAA-MM-DD] [--schema=multforma]
+// Uso: npm run importar -- [--verificar] [--listar-unidade=CE] [--escopo=recente|tudo|cadastros] [--desde=AAAA-MM-DD] [--schema=multforma]
 // ORIGEM_DATABASE_URL = banco do sistema anterior (só leitura); DATABASE_URL = banco do VidroGest.
 import { fileURLToPath } from 'node:url';
 import { closePool, getPool } from '../lib/db.js';
@@ -30,6 +30,11 @@ export async function principal(): Promise<number> {
   try {
     const ctx = { origem, destino, mapa: new MapaLegado(destino), opcoes, relatorio, log: (m: string) => console.log(m) };
     const importador = new Importador(ctx);
+    const unidade = argumento('listar-unidade');
+    if (unidade) {
+      console.log(await importador.listarUnidade(unidade));
+      return 0;
+    }
     if (verificar) {
       const r = await importador.verificar();
       console.log(r.texto);
