@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { today } from '../../lib/format';
-import { mesDe, type Periodo } from './periodo';
+import { mesDe, type Periodo } from '../../lib/periodo';
 
 /** Período guardado na URL (?de=&ate=), com o mês corrente como padrão. */
 export function usePeriodoUrl(): [Periodo, (p: Periodo) => void, URLSearchParams, (k: string, v: string) => void] {

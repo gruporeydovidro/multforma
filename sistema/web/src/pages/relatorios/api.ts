@@ -1,6 +1,6 @@
 // Cliente tipado do módulo Relatórios: as telas usam só este arquivo, nunca montam URLs.
 import { api, qs } from '../../lib/api';
-import type { Periodo } from './periodo';
+import type { Periodo } from '../../lib/periodo';
 
 export type Agrupamento = 'dia' | 'vendedor' | 'cliente' | 'produto';
 export type TipoRanking = 'clientes' | 'produtos' | 'vendedores';

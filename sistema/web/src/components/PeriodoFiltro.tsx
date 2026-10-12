@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { atalhosPeriodo, periodoValido, type Periodo } from '../periodo';
+import { atalhosPeriodo, periodoValido, type Periodo } from '../lib/periodo';
 
 /**
  * Filtro de período reutilizável: datas de/até, atalhos e botão Aplicar.

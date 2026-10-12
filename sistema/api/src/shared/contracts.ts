@@ -56,10 +56,40 @@ export interface ProducaoPort {
   criarOrdemProducao(db: Db, orcamentoId: number): Promise<number | null>;
 }
 
+/** Vão a que um projeto é aplicado no orçamento (mm). */
+export interface VaoProjeto {
+  largura_vao_mm: number;
+  altura_vao_mm: number;
+  quantidade: number;
+  vidro_produto_id: number | null;
+}
+
+/** Peça gerada pela expansão de um projeto (sem preço). */
+export interface PecaProjetoExpandida {
+  descricao: string;
+  tipo: string;
+  produto_id: number;
+  quantidade: number;
+  largura_mm: number | null;
+  altura_mm: number | null;
+}
+
+export interface ProjetosPort {
+  /** Expande um gabarito para um vão, dentro da transação de quem chama. */
+  expandir(db: Db, projetoId: number, vao: VaoProjeto): Promise<{ id: number; nome: string; pecas: PecaProjetoExpandida[] }>;
+}
+
+/** Operações de escrita no cadastro de produtos pedidas por outros módulos. */
+export interface CatalogoPort {
+  atualizarCusto(db: Db, produtoId: number, custo: number): Promise<void>;
+}
+
 export interface Ports {
   estoque: EstoquePort;
   financeiro: FinanceiroPort;
   producao: ProducaoPort;
+  projetos: ProjetosPort;
+  catalogo: CatalogoPort;
 }
 
 /** Opções recebidas por todo plugin de módulo em modules/index.ts. */

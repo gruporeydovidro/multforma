@@ -2,10 +2,10 @@ import { Alert, Card, DataTable, PageHeader } from '../../components/ui';
 import { date, money } from '../../lib/format';
 import { useAsync } from '../../lib/useAsync';
 import { relatoriosApi, type ResumoFinanceiro } from './api';
-import { AcoesRelatorio } from './components/AcoesRelatorio';
-import { Indicador, Indicadores } from './components/Indicador';
-import { PeriodoFiltro } from './components/PeriodoFiltro';
-import { baixarCsv, gerarCsv, numeroCsv } from './csv';
+import { AcoesRelatorio } from '../../components/AcoesRelatorio';
+import { Indicador, Indicadores } from '../../components/Indicador';
+import { PeriodoFiltro } from '../../components/PeriodoFiltro';
+import { baixarCsv, gerarCsv, numeroCsv } from '../../lib/csv';
 import { usePeriodoUrl } from './hooks';
 
 interface LinhaResumo { item: string; quantidade?: number; valor: number }

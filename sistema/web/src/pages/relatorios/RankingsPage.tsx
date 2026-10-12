@@ -2,9 +2,9 @@ import { Alert, Card, DataTable, PageHeader, type Column } from '../../component
 import { date, decimal, money } from '../../lib/format';
 import { useAsync } from '../../lib/useAsync';
 import { relatoriosApi, type PosicaoRanking, type RelatorioRanking, type TipoRanking } from './api';
-import { AcoesRelatorio } from './components/AcoesRelatorio';
-import { PeriodoFiltro } from './components/PeriodoFiltro';
-import { baixarCsv, gerarCsv, numeroCsv } from './csv';
+import { AcoesRelatorio } from '../../components/AcoesRelatorio';
+import { PeriodoFiltro } from '../../components/PeriodoFiltro';
+import { baixarCsv, gerarCsv, numeroCsv } from '../../lib/csv';
 import { usePeriodoUrl } from './hooks';
 
 const TIPOS: { value: TipoRanking; label: string; coluna: string; qtd: string }[] = [

@@ -12,4 +12,9 @@ export class AuthService {
     if (!u || !(await bcrypt.compare(senha, u.senha_hash))) throw new HttpError(401, 'Usuário ou senha inválidos');
     return { id: u.id, nome: u.nome, login: u.login, perfil: u.perfil, filial_id: u.filial_id };
   }
+
+  /** A sessão só vale enquanto o usuário continuar ativo (desativação tem efeito imediato). */
+  async validarSessao(user: SessionUser): Promise<void> {
+    if (!(await this.credenciais.estaAtivo(user.id))) throw new HttpError(401, 'Sessão encerrada');
+  }
 }

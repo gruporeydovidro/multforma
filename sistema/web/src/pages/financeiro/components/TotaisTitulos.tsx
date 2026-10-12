@@ -1,5 +1,5 @@
 import { money } from '../../../lib/format';
-import { Indicador, Indicadores } from '../../relatorios/components/Indicador';
+import { Indicador, Indicadores } from '../../../components/Indicador';
 import type { TotaisTitulos as Totais } from '../api';
 
 /** Totalizadores de uma lista de títulos (aberto, vencido e pago no período). */

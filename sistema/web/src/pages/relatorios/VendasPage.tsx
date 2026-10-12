@@ -2,10 +2,10 @@ import { Alert, Card, DataTable, PageHeader, type Column } from '../../component
 import { date, decimal, money } from '../../lib/format';
 import { useAsync } from '../../lib/useAsync';
 import { relatoriosApi, type Agrupamento, type LinhaVenda, type RelatorioVendas } from './api';
-import { AcoesRelatorio } from './components/AcoesRelatorio';
-import { Indicador, Indicadores } from './components/Indicador';
-import { PeriodoFiltro } from './components/PeriodoFiltro';
-import { baixarCsv, gerarCsv, numeroCsv, type ColunaCsv } from './csv';
+import { AcoesRelatorio } from '../../components/AcoesRelatorio';
+import { Indicador, Indicadores } from '../../components/Indicador';
+import { PeriodoFiltro } from '../../components/PeriodoFiltro';
+import { baixarCsv, gerarCsv, numeroCsv, type ColunaCsv } from '../../lib/csv';
 import { usePeriodoUrl } from './hooks';
 
 const AGRUPAMENTOS: { value: Agrupamento; label: string; coluna: string }[] = [

@@ -1,7 +1,7 @@
 import { withTx, type Db } from '../../lib/db.js';
 import { badRequest, conflict, notFound } from '../../lib/http.js';
 import { logAcao } from '../../lib/log.js';
-import type { EstoquePort } from '../../shared/contracts.js';
+import type { CatalogoPort, EstoquePort } from '../../shared/contracts.js';
 import { Acerto, CustoMedio, ErroEstoque, SaldoEstoque } from './domain/index.js';
 import type { ProdutoEstoque } from './produto-estoque.repository.js';
 import type { FabricaRepositoriosEstoque, RepositoriosEstoque } from './repositorios.js';
@@ -42,6 +42,7 @@ export class MovimentacaoService {
   constructor(
     private readonly repos: FabricaRepositoriosEstoque,
     private readonly estoque: EstoquePort,
+    private readonly catalogo: CatalogoPort,
   ) {}
 
   registrarEntrada(op: Operador, e: EntradaInput) {
@@ -51,7 +52,7 @@ export class MovimentacaoService {
       if (e.custo_unitario != null) {
         const saldo = await this.estoque.saldo(db, op.filialId, produto.id);
         const novo = regra(() => new CustoMedio(saldo, produto.custo).aplicarEntrada(e.quantidade, e.custo_unitario!));
-        await r.produtos.atualizarCusto(produto.id, novo.custo);
+        await this.catalogo.atualizarCusto(db, produto.id, novo.custo);
       }
       const id = await this.estoque.registrarMovimento(db, {
         filial_id: op.filialId,

@@ -1,9 +1,21 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { can, useAuth } from '../lib/auth';
 import { modules } from '../pages/modules';
 
+/** Item do menu ativo: o de caminho mais longo que é prefixo da URL atual. */
+const absoluto = (p: string) => (p.startsWith('/') ? p : `/${p}`);
+
+function caminhoAtivo(pathname: string, paths: string[]): string | undefined {
+  return paths
+    .map(absoluto)
+    .filter((p) => (p === '/' ? pathname === '/' : pathname === p || pathname.startsWith(`${p}/`)))
+    .sort((a, b) => b.length - a.length)[0];
+}
+
 export function Layout() {
   const { user, logout } = useAuth();
+  const { pathname } = useLocation();
+  const ativo = caminhoAtivo(pathname, modules.flatMap((m) => m.menu.map((i) => i.path)));
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -16,9 +28,9 @@ export function Layout() {
               <div key={m.titulo} className="nav-group">
                 <div className="nav-title">{m.titulo}</div>
                 {items.map((i) => (
-                  <NavLink key={i.path} to={i.path} end={i.path === '/'} className={({ isActive }) => (isActive ? 'active' : '')}>
+                  <Link key={i.path} to={absoluto(i.path)} className={absoluto(i.path) === ativo ? 'active' : ''}>
                     {i.label}
-                  </NavLink>
+                  </Link>
                 ))}
               </div>
             );

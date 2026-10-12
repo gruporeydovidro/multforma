@@ -2,24 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAsync } from '../../lib/useAsync';
 import { projetosApi, type FiltroProjetos, type ItemProjeto, type PecaSimulada, type Projeto, type ProjetoInput, type Vao } from './api';
 
-/** Estado de envio: desabilita botões e guarda a mensagem de erro da API. */
-export function useEnvio() {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const run = useCallback(async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
-    setBusy(true);
-    setError('');
-    try {
-      return await fn();
-    } catch (e) {
-      setError((e as Error).message);
-      return undefined;
-    } finally {
-      setBusy(false);
-    }
-  }, []);
-  return { busy, error, setError, run };
-}
+import { useEnvio } from '../../lib/useEnvio';
+
+export { useEnvio };
 
 /** Lista paginada com filtros. */
 export function useProjetos() {

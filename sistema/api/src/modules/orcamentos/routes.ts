@@ -14,11 +14,10 @@ import {
   projetoOrcamentoSchema,
   projetoParam,
 } from './orcamentos.schemas.js';
-import { criarProjetosPort } from './projetos.adapter.js';
 
 /** Orçamentos (vendas): escrita para vendedor; leitura também para financeiro. Adaptador HTTP fino. */
 export default async function orcamentosRoutes(app: FastifyInstance, opts: ModuloOptions) {
-  const service = new OrcamentoService(opts.ports, criarProjetosPort(opts));
+  const service = new OrcamentoService(opts.ports, opts.ports.projetos);
   const leitura = { preHandler: requirePerfil('vendedor', 'financeiro') };
   const escrita = { preHandler: requirePerfil('vendedor') };
 

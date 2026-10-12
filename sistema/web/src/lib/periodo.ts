@@ -1,5 +1,5 @@
 // Períodos de datas (funções puras).
-import { addDays, today } from '../../lib/format';
+import { addDays, today } from './format';
 
 export interface Periodo {
   de: string;

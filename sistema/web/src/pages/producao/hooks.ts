@@ -2,24 +2,9 @@ import { useCallback, useState } from 'react';
 import { useAsync } from '../../lib/useAsync';
 import { producaoApi, type FiltroOrdens, type ItemOrdem, type MarcacaoInput } from './api';
 
-/** Estado de envio: desabilita botões e guarda a mensagem de erro da API. */
-export function useEnvio() {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const run = useCallback(async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
-    setBusy(true);
-    setError('');
-    try {
-      return await fn();
-    } catch (e) {
-      setError((e as Error).message);
-      return undefined;
-    } finally {
-      setBusy(false);
-    }
-  }, []);
-  return { busy, error, setError, run };
-}
+import { useEnvio } from '../../lib/useEnvio';
+
+export { useEnvio };
 
 export const useSetores = (ativo?: boolean) => useAsync(() => producaoApi.setores(ativo), [ativo]);
 export const useMotivos = () => useAsync(() => producaoApi.motivos(), []);

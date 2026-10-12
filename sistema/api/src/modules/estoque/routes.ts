@@ -12,7 +12,7 @@ const operador = (req: FastifyRequest): Operador => ({ filialId: req.user.filial
 /** Estoque: leitura para todos os perfis; movimentação para admin e produção. */
 export default async function estoqueRoutes(app: FastifyInstance, opts: ModuloOptions) {
   const consulta = new ConsultaEstoqueService(repositoriosEstoque);
-  const movimentacao = new MovimentacaoService(repositoriosEstoque, opts.ports.estoque);
+  const movimentacao = new MovimentacaoService(repositoriosEstoque, opts.ports.estoque, opts.ports.catalogo);
 
   app.get('/saldos', async (req) => consulta.saldos(req.user.filial_id, saldosQuery.parse(req.query)));
 

@@ -3,7 +3,7 @@ import { Alert, Badge, Card, DataTable, PageHeader } from '../../components/ui';
 import { can, useAuth } from '../../lib/auth';
 import { date, money } from '../../lib/format';
 import { useAsync } from '../../lib/useAsync';
-import { Indicador, Indicadores } from '../relatorios/components/Indicador';
+import { Indicador, Indicadores } from '../../components/Indicador';
 import { inicioApi, type Painel } from './api';
 
 const STATUS_ORC: Record<string, { label: string; tone: 'blue' | 'orange' | 'green' | 'neutral' }> = {

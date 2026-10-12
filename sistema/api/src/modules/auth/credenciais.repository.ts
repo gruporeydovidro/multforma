@@ -21,4 +21,9 @@ export class CredenciaisRepository {
       this.db,
     );
   }
+
+  async estaAtivo(id: number): Promise<boolean> {
+    const r = await queryOne<{ ativo: boolean }>('select ativo from usuario where id = $1', [id], this.db);
+    return r?.ativo === true;
+  }
 }

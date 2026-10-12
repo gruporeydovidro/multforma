@@ -38,8 +38,8 @@ const SALDOS = `
      and (not $3::boolean or coalesce(s.saldo, 0) < p.estoque_minimo)`;
 
 /**
- * Dados de produto usados pelo estoque. O produto pertence a Cadastros; aqui só se lê
- * e se atualiza o custo médio (resultado das entradas de estoque).
+ * Leitura dos dados de produto usados pelo estoque. O produto pertence a Cadastros: a gravação
+ * do custo médio passa pela CatalogoPort.
  */
 export class ProdutoEstoqueRepository {
   constructor(private readonly db: Db) {}
@@ -59,10 +59,6 @@ export class ProdutoEstoqueRepository {
       [id],
       this.db,
     );
-  }
-
-  async atualizarCusto(id: number, custo: number): Promise<void> {
-    await query('update produto set custo = $2 where id = $1', [id, custo], this.db);
   }
 
   async listarSaldos(filialId: number, f: FiltroSaldos): Promise<{ items: SaldoProduto[]; total: number }> {

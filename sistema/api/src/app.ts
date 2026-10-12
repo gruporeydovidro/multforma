@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 import { COOKIE } from './lib/auth.js';
 import { errorHandler, HttpError } from './lib/http.js';
 import { registerModules } from './modules/index.js';
+import { AuthService } from './modules/auth/auth.service.js';
+import { CredenciaisRepository } from './modules/auth/credenciais.repository.js';
+import { getPool } from './lib/db.js';
 
 declare module 'fastify' {
   interface FastifyContextConfig {
@@ -25,6 +28,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(jwt, { secret, cookie: { cookieName: COOKIE, signed: false } });
   app.setErrorHandler(errorHandler);
 
+  const auth = new AuthService(new CredenciaisRepository(getPool()));
   app.addHook('onRequest', async (req) => {
     if (!req.url.startsWith('/api/') || req.routeOptions.config?.public) return;
     try {
@@ -32,6 +36,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     } catch {
       throw new HttpError(401, 'Não autenticado');
     }
+    await auth.validarSessao(req.user);
   });
 
   app.get('/api/health', { config: { public: true } }, async () => ({ ok: true }));
