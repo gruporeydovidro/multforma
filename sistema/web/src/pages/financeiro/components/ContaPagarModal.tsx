@@ -48,7 +48,7 @@ export function ContaPagarModal({ aberto, titulo, onFechar, onSalvo }: { aberto:
       fornecedor_id: f.fornecedor_id, descricao: f.descricao.trim(), categoria: f.categoria.trim() || null, documento: f.documento.trim() || null,
       observacao: f.observacao.trim() || null, forma_pagamento: f.forma || null,
     };
-    const r = await executar(() => editando
+    const r = await executar<unknown>(() => editando
       ? financeiroApi.pagar.atualizar(titulo!.id, { ...dados, vencimento: f.vencimento, valor: total })
       : financeiroApi.pagar.criar({ ...dados, valor_total: total, parcelas: f.parcelas, primeiro_vencimento: f.vencimento }));
     if (r) { onSalvo(); onFechar(); }

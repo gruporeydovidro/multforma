@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAsync } from '../../lib/useAsync';
-import { apoioApi, orcamentosApi, type FechamentoInput, type FiltroOrcamentos, type ItemInput, type Opcao, type Orcamento, type ProjetoInput } from './api';
+import { apoioApi, orcamentosApi, type Cabecalho, type FechamentoInput, type FiltroOrcamentos, type ItemInput, type Opcao, type Orcamento, type ProjetoInput } from './api';
 
 /** Estado de envio: desabilita botões e guarda a mensagem de erro da API. */
 export function useEnvio() {
@@ -87,3 +87,10 @@ export function useOrcamento(id: number | null) {
 }
 
 export type UseOrcamento = ReturnType<typeof useOrcamento>;
+
+/** Criação do orçamento (só o cabeçalho). */
+export function useNovoOrcamento() {
+  const envio = useEnvio();
+  const criar = (c: Partial<Cabecalho> & { cliente_id: number }) => envio.run(() => orcamentosApi.criar(c));
+  return { criar, ...envio };
+}

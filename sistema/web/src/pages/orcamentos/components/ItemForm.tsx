@@ -85,33 +85,25 @@ export function ItemRapidoForm({ usaTabela, busy, onIncluir }: { usaTabela: bool
   );
 }
 
-/** Edição de um item existente (o servidor recalcula medidas e total). */
+/** Edição de um item existente (o servidor recalcula medidas e total). Renderize com key={item.id}. */
 export function ItemEditModal({ item, busy, onFechar, onSalvar }: {
-  item: ItemOrcamento | null;
+  item: ItemOrcamento;
   busy: boolean;
   onFechar: () => void;
   onSalvar: (patch: Partial<ItemInput>) => Promise<unknown>;
 }) {
-  const de = (it: ItemOrcamento): CamposItem => ({
-    ambiente: it.ambiente ?? '',
-    largura: it.largura_mm?.toString() ?? '',
-    altura: it.altura_mm?.toString() ?? '',
-    quantidade: String(it.quantidade),
-    preco: String(it.preco_unitario),
-    desconto: String(it.desconto_valor),
-    descricao: it.descricao,
-  });
-  const [c, setC] = useState<CamposItem | null>(null);
-  const [editando, setEditando] = useState<number | null>(null);
-  if (item && editando !== item.id) {
-    setEditando(item.id);
-    setC(de(item));
-  }
-  if (!item && editando !== null) setEditando(null);
-  const set = (k: keyof CamposItem, v: string) => setC((a) => (a ? { ...a, [k]: v } : a));
+  const [c, setC] = useState<CamposItem>(() => ({
+    ambiente: item.ambiente ?? '',
+    largura: item.largura_mm?.toString() ?? '',
+    altura: item.altura_mm?.toString() ?? '',
+    quantidade: String(item.quantidade),
+    preco: String(item.preco_unitario),
+    desconto: String(item.desconto_valor),
+    descricao: item.descricao,
+  }));
+  const set = (k: keyof CamposItem, v: string) => setC((a) => ({ ...a, [k]: v }));
 
   const salvar = async () => {
-    if (!c) return;
     const r = await onSalvar({
       descricao: c.descricao || null,
       ambiente: c.ambiente || null,
@@ -126,8 +118,8 @@ export function ItemEditModal({ item, busy, onFechar, onSalvar }: {
 
   return (
     <Modal
-      title={`Editar item ${item?.seq ?? ''}`}
-      open={!!item && !!c}
+      title={`Editar item ${item.seq}`}
+      open
       onClose={onFechar}
       footer={
         <>
@@ -136,17 +128,15 @@ export function ItemEditModal({ item, busy, onFechar, onSalvar }: {
         </>
       }
     >
-      {c && (
-        <div className="grid">
-          <Input className="col-12" label="Descrição" value={c.descricao} onChange={(e) => set('descricao', e.target.value)} />
-          <Input className="col-6" label="Ambiente" list="ambientes-orcamento" value={c.ambiente} onChange={(e) => set('ambiente', e.target.value)} />
-          <Input className="col-6" label="Quantidade" type="number" min={0} step="any" value={c.quantidade} onChange={(e) => set('quantidade', e.target.value)} />
-          <Input className="col-6" label="Largura (mm)" type="number" min={1} value={c.largura} onChange={(e) => set('largura', e.target.value)} />
-          <Input className="col-6" label="Altura (mm)" type="number" min={1} value={c.altura} onChange={(e) => set('altura', e.target.value)} />
-          <Input className="col-6" label={`Preço unitário (${item?.unidade})`} type="number" min={0} step="0.01" value={c.preco} onChange={(e) => set('preco', e.target.value)} />
-          <Input className="col-6" label="Desconto do item (R$)" type="number" min={0} step="0.01" value={c.desconto} onChange={(e) => set('desconto', e.target.value)} />
-        </div>
-      )}
+      <div className="grid">
+        <Input className="col-12" label="Descrição" value={c.descricao} onChange={(e) => set('descricao', e.target.value)} />
+        <Input className="col-6" label="Ambiente" list="ambientes-orcamento" value={c.ambiente} onChange={(e) => set('ambiente', e.target.value)} />
+        <Input className="col-6" label="Quantidade" type="number" min={0} step="any" value={c.quantidade} onChange={(e) => set('quantidade', e.target.value)} />
+        <Input className="col-6" label="Largura (mm)" type="number" min={1} value={c.largura} onChange={(e) => set('largura', e.target.value)} />
+        <Input className="col-6" label="Altura (mm)" type="number" min={1} value={c.altura} onChange={(e) => set('altura', e.target.value)} />
+        <Input className="col-6" label={`Preço unitário (${item.unidade})`} type="number" min={0} step="0.01" value={c.preco} onChange={(e) => set('preco', e.target.value)} />
+        <Input className="col-6" label="Desconto do item (R$)" type="number" min={0} step="0.01" value={c.desconto} onChange={(e) => set('desconto', e.target.value)} />
+      </div>
     </Modal>
   );
 }

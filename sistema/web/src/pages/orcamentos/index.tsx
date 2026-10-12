@@ -1,10 +1,19 @@
 import type { ModuleDef } from '../../lib/module';
+import { ImpressaoOrcamentoPage } from './ImpressaoOrcamentoPage';
+import { OrcamentoPage } from './OrcamentoPage';
+import { OrcamentosPage } from './OrcamentosPage';
 
-// Módulo Vendas: registrar aqui o menu e as rotas (ver docs/CONVENCOES.md).
 const modulo: ModuleDef = {
   titulo: 'Vendas',
-  menu: [],
-  routes: [],
+  menu: [
+    { label: 'Orçamentos', path: 'orcamentos', perfis: ['vendedor', 'financeiro'] },
+    { label: 'Novo orçamento', path: 'orcamentos/novo', perfis: ['vendedor'] },
+  ],
+  routes: [
+    { path: 'orcamentos', element: <OrcamentosPage /> },
+    { path: 'orcamentos/:id', element: <OrcamentoPage /> },
+    { path: 'orcamentos/:id/imprimir', element: <ImpressaoOrcamentoPage /> },
+  ],
 };
 
 export default modulo;

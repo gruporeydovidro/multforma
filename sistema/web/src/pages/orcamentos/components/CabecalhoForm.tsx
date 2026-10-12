@@ -44,7 +44,9 @@ export function CabecalhoForm({ orcamento, vendedores, tabelas, editavel, financ
 }) {
   const [f, setF] = useState<Form>(() => inicial(orcamento));
   const [erro, setErro] = useState('');
-  useEffect(() => setF(inicial(orcamento)), [orcamento]);
+  // Só reinicia quando o cabeçalho gravado muda (incluir itens não descarta edições em andamento).
+  const gravado = JSON.stringify(inicial(orcamento));
+  useEffect(() => setF(JSON.parse(gravado)), [gravado]);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((a) => ({ ...a, [k]: v }));
 
   const salvar = () => {

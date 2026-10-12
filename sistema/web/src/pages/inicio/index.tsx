@@ -1,10 +1,10 @@
 import type { ModuleDef } from '../../lib/module';
+import { PainelPage } from './PainelPage';
 
-// Módulo Início: registrar aqui o menu e as rotas (ver docs/CONVENCOES.md).
 const modulo: ModuleDef = {
   titulo: 'Início',
-  menu: [],
-  routes: [],
+  menu: [{ label: 'Painel', path: '/' }],
+  routes: [{ path: '', element: <PainelPage /> }],
 };
 
 export default modulo;
