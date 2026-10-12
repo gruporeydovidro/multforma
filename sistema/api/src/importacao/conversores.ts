@@ -68,9 +68,9 @@ export type UnidadeVidroGest = 'M2' | 'ML' | 'UN' | 'PC' | 'KG';
 
 /**
  * Unidade de venda do sistema anterior para a do VidroGest. M2 = área; MT/ML = metro linear (o legado tem M2 separado);
- * PÇ/PC = peça; demais (CE, CJ, CX, PR...) = unidade. Ajustável em UNIDADES_LEGADO.
+ * CE = moldura para quadro, vendida por metro linear; PÇ/PC = peça; demais (CJ, CX, PR...) = unidade.
  */
-export const UNIDADES_LEGADO: Record<string, UnidadeVidroGest> = { M2: 'M2', MT: 'ML', ML: 'ML', PC: 'PC', 'PÇ': 'PC', KG: 'KG', UN: 'UN' };
+export const UNIDADES_LEGADO: Record<string, UnidadeVidroGest> = { M2: 'M2', MT: 'ML', ML: 'ML', CE: 'ML', PC: 'PC', 'PÇ': 'PC', KG: 'KG', UN: 'UN' };
 
 export function unidadeVenda(v: unknown): UnidadeVidroGest {
   return UNIDADES_LEGADO[String(v ?? '').trim().toUpperCase()] ?? 'UN';

@@ -9,7 +9,7 @@ O importador lê o banco antigo **apenas em modo leitura** e grava no banco do V
 | `emitente` + `emitente_endereco` | Clientes/fornecedores | É fornecedor quem aparece em contas a pagar ou como fornecedor de produto; é cliente quem aparece em orçamentos ou contas a receber. CPF/CNPJ inválido ou repetido não é gravado no campo de documento e fica registrado nas observações. |
 | `funcionario` | Funcionários | É vendedor quem aparece como vendedor em algum orçamento. |
 | `grupo`, `arredondamento`, `produto_tblpreco` | Grupos, arredondamentos, tabelas de preço | Nomes que já existem recebem o código antigo entre parênteses. |
-| `produto` + `produto_preco` | Produtos e preços por tabela | O código do produto é o mesmo do sistema antigo. As unidades são convertidas assim: `M2` vira M², `MT`/`ML` viram metro linear, `PÇ`/`PC` viram peça e as demais viram unidade. A área mínima vem do grupo. |
+| `produto` + `produto_preco` | Produtos e preços por tabela | O código do produto é o mesmo do sistema antigo. As unidades são convertidas assim: `M2` vira M², `MT`/`ML` e `CE` (molduras para quadro) viram metro linear, `PÇ`/`PC` viram peça e as demais viram unidade. A área mínima vem do grupo. |
 | `projeto` + `projeto_item` | Projetos | As fórmulas são convertidas para L/A (por exemplo `LARGURA/2+25` vira `L/2+25`) e validadas. As que não puderem ser convertidas ficam anotadas na descrição do projeto. |
 | `usuario` | Usuários | Entram **inativos** e sem a senha antiga. O administrador define a senha e ativa cada um em Cadastros → Usuários. |
 | `estoque_saldo` | Saldo inicial de estoque | Gravado como um acerto "SALDO INICIAL". |

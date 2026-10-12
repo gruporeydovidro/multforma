@@ -8,7 +8,7 @@ import { MapaLegado } from '../src/importacao/mapa-legado.js';
 import { dataAnosAtras, type Escopo } from '../src/importacao/opcoes.js';
 import { OrigemLegado } from '../src/importacao/origem.js';
 import { Relatorio } from '../src/importacao/relatorio.js';
-import { formula, statusOrcamento } from '../src/importacao/conversores.js';
+import { formula, statusOrcamento, unidadeVenda } from '../src/importacao/conversores.js';
 import { resetDb } from './helpers.js';
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
@@ -46,6 +46,10 @@ describe('conversores da importação', () => {
     expect(formula('L*(1,5').texto).toBeNull();
     expect(formula('L*(1,5').aviso).toMatch(/não convertida/);
     expect(formula('').texto).toBeNull();
+  });
+
+  it('converte as unidades de venda', () => {
+    expect([unidadeVenda('M2'), unidadeVenda('MT'), unidadeVenda('CE'), unidadeVenda('PÇ'), unidadeVenda('CJ')]).toEqual(['M2', 'ML', 'ML', 'PC', 'UN']);
   });
 
   it('mapeia a situação do orçamento', () => {
